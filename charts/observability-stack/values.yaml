@@ -255,4 +255,9 @@ prometheus:
     enabled: false
 
 # -- Global settings
+# NOTE: opensearchUsername/Password are the single source of truth.
+# OpenSearch and OSD reference these via extraEnvs/config.
+# Data Prepper pipeline configs don't support templating, so the password
+# is duplicated there — update both if you change it.
+opensearchUsername: "admin"
 opensearchPassword: "My_password_123!@#"

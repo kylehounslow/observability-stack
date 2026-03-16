@@ -27,9 +27,15 @@ spec:
               pip install -q requests pyyaml && python /scripts/init-opensearch-dashboards.py
           env:
             - name: OPENSEARCH_USER
-              value: {{ .Values.opensearchUsername | default "admin" | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "observability-stack.fullname" . }}-opensearch-credentials
+                  key: username
             - name: OPENSEARCH_PASSWORD
-              value: {{ .Values.opensearchPassword | quote }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "observability-stack.fullname" . }}-opensearch-credentials
+                  key: password
             - name: BASE_URL
               value: "http://{{ .Release.Name }}-opensearch-dashboards:5601"
             - name: PROMETHEUS_HOST
