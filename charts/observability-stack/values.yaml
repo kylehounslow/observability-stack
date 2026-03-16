@@ -41,12 +41,19 @@ opensearch-dashboards:
 data-prepper:
   enabled: true
   image:
-    tag: "latest"
+    repository: "sgguruda62324/opensearch-data-prepper"
+    tag: "2.15.0-SNAPSHOT"
   config:
     data-prepper-config.yaml: |
       ssl: false
       peer_forwarder:
         ssl: false
+      experimental:
+        enabled_plugins:
+          processor:
+            - otel_apm_service_map
+          sink:
+            - prometheus
   livenessProbe:
     initialDelaySeconds: 30
     periodSeconds: 10
@@ -142,6 +149,12 @@ data-prepper:
               index_type: otel-v2-apm-service-map
               routes: [otel_apm_service_map_route]
               insecure: true
+          - prometheus:
+              url: "http://obs-stack-prometheus-server:80/api/v1/write"
+              threshold:
+                max_events: 500
+                flush_interval: 5s
+              routes: [service_processed_metrics]
 
 # -- OpenTelemetry Collector
 opentelemetry-collector:
