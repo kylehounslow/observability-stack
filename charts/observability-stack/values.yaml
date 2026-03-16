@@ -10,6 +10,9 @@ opensearch:
     requests:
       memory: "2Gi"
       cpu: "500m"
+  extraEnvs:
+    - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+      value: "My_password_123!@#"
   config:
     opensearch.yml: |
       plugins.query.datasources.encryption.masterkey: "BTqK4Ytdz67La1kShIKV3Pu9"
@@ -18,11 +21,11 @@ opensearch:
 opensearch-dashboards:
   enabled: true
   replicas: 1
-  opensearchHosts: "https://{{ .Release.Name }}-opensearch:9200"
+  opensearchHosts: "https://opensearch-cluster-master:9200"
   config:
     opensearch_dashboards.yml: |
       server.host: "0.0.0.0"
-      opensearch.hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+      opensearch.hosts: ["https://opensearch-cluster-master:9200"]
       opensearch.ssl.verificationMode: none
       opensearch.requestHeadersAllowlist: ["securitytenant", "Authorization"]
       opensearch_security.multitenancy.enabled: false
@@ -35,6 +38,21 @@ opensearch-dashboards:
 # -- Data Prepper
 data-prepper:
   enabled: true
+  image:
+    tag: "latest"
+  config:
+    data-prepper-config.yaml: |
+      ssl: false
+      peer_forwarder:
+        ssl: false
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 10
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 10
   pipelineConfig:
     enabled: true
     config:
@@ -71,9 +89,9 @@ data-prepper:
                   to_key: "@timestamp"
         sink:
           - opensearch:
-              hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+              hosts: ["https://opensearch-cluster-master:9200"]
               username: "admin"
-              password: "{{ .Values.opensearchPassword }}"
+              password: "My_password_123!@#"
               insecure: true
               index_type: log-analytics-plain
 
@@ -96,9 +114,9 @@ data-prepper:
           - otel_traces: {}
         sink:
           - opensearch:
-              hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+              hosts: ["https://opensearch-cluster-master:9200"]
               username: "admin"
-              password: "{{ .Values.opensearchPassword }}"
+              password: "My_password_123!@#"
               insecure: true
               index_type: trace-analytics-plain-raw
 
@@ -116,18 +134,12 @@ data-prepper:
           - service_processed_metrics: 'getEventType() == "METRIC"'
         sink:
           - opensearch:
-              hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+              hosts: ["https://opensearch-cluster-master:9200"]
               username: "admin"
-              password: "{{ .Values.opensearchPassword }}"
+              password: "My_password_123!@#"
               index_type: otel-v2-apm-service-map
               routes: [otel_apm_service_map_route]
               insecure: true
-          - prometheus:
-              url: "http://{{ .Release.Name }}-prometheus-server:9090/api/v1/write"
-              threshold:
-                max_events: 500
-                flush_interval: 5s
-              routes: [service_processed_metrics]
 
 # -- OpenTelemetry Collector
 opentelemetry-collector:
@@ -175,11 +187,11 @@ opentelemetry-collector:
       debug:
         verbosity: detailed
       otlp/opensearch:
-        endpoint: "{{ .Release.Name }}-data-prepper:21890"
+        endpoint: "obs-stack-data-prepper:21890"
         tls:
           insecure: true
       otlphttp/prometheus:
-        endpoint: "http://{{ .Release.Name }}-prometheus-server:9090/api/v1/otlp"
+        endpoint: "http://obs-stack-prometheus-server:80/api/v1/otlp"
         tls:
           insecure: true
     service:
