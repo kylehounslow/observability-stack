@@ -9,3 +9,5 @@ node_modules
 dist
 build
 .DS_Store
+charts/observability-stack/charts/
+charts/observability-stack/Chart.lock

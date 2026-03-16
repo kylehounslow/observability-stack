@@ -1,0 +1,22 @@
+🚀 Observability Stack deployed!
+
+Components:
+{{- if index .Values "opensearch" "enabled" }}
+  - OpenSearch: https://{{ .Release.Name }}-opensearch:9200
+{{- end }}
+{{- if index .Values "opensearch-dashboards" "enabled" }}
+  - OpenSearch Dashboards: http://{{ .Release.Name }}-opensearch-dashboards:5601
+{{- end }}
+{{- if index .Values "data-prepper" "enabled" }}
+  - Data Prepper: {{ .Release.Name }}-data-prepper:21890
+{{- end }}
+{{- if index .Values "opentelemetry-collector" "enabled" }}
+  - OTel Collector (gRPC): {{ .Release.Name }}-opentelemetry-collector:4317
+  - OTel Collector (HTTP): {{ .Release.Name }}-opentelemetry-collector:4318
+{{- end }}
+{{- if index .Values "prometheus" "enabled" }}
+  - Prometheus: http://{{ .Release.Name }}-prometheus-server:9090
+{{- end }}
+
+Send telemetry to:
+  OTEL_EXPORTER_OTLP_ENDPOINT={{ .Release.Name }}-opentelemetry-collector:4317
