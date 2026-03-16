@@ -1,0 +1,15 @@
+{{- if index .Values "opensearch-dashboards" "enabled" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-init-script
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  init-opensearch-dashboards.py: |
+{{ .Files.Get "files/init-opensearch-dashboards.py" | indent 4 }}
+{{- end }}
