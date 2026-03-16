@@ -27,6 +27,8 @@ opensearch-dashboards:
       server.host: "0.0.0.0"
       opensearch.hosts: ["https://opensearch-cluster-master:9200"]
       opensearch.ssl.verificationMode: none
+      opensearch.username: "admin"
+      opensearch.password: "My_password_123!@#"
       opensearch.requestHeadersAllowlist: ["securitytenant", "Authorization"]
       opensearch_security.multitenancy.enabled: false
       opensearch_security.readonly_mode.roles: ["kibana_read_only"]
