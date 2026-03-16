@@ -261,3 +261,10 @@ prometheus:
 # is duplicated there — update both if you change it.
 opensearchUsername: "admin"
 opensearchPassword: "My_password_123!@#"
+
+# -- Canary agent (generates sample GenAI traces on a schedule)
+canary:
+  enabled: true
+  schedule: "*/2 * * * *"
+  serviceName: "example-canary-agent"
+  tracesPerRun: 5

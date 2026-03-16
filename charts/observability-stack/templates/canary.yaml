@@ -1,0 +1,114 @@
+{{- if .Values.canary.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-canary
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.canary.schedule | default "*/1 * * * *" | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: canary
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: canary
+              image: python:3.12-slim
+              command:
+                - /bin/sh
+                - -c
+                - pip install -q opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc && python /scripts/canary.py
+              env:
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "http://{{ .Release.Name }}-opentelemetry-collector:4317"
+                - name: OTEL_SERVICE_NAME
+                  value: {{ .Values.canary.serviceName | default "example-canary-agent" | quote }}
+              volumeMounts:
+                - name: canary-script
+                  mountPath: /scripts
+          volumes:
+            - name: canary-script
+              configMap:
+                name: {{ include "observability-stack.fullname" . }}-canary-script
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observability-stack.fullname" . }}-canary-script
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+data:
+  canary.py: |
+    """Canary agent that generates realistic GenAI trace data."""
+    import os, time, random
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.sdk.resources import Resource
+
+    resource = Resource.create({
+        "service.name": os.getenv("OTEL_SERVICE_NAME", "example-canary-agent"),
+        "service.version": "1.0.0",
+    })
+    provider = TracerProvider(resource=resource)
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(insecure=True)))
+    trace.set_tracer_provider(provider)
+    tracer = trace.get_tracer("canary")
+
+    models = ["gpt-4o", "claude-sonnet-4-20250514", "amazon.nova-pro"]
+    providers = ["openai", "anthropic", "aws.bedrock"]
+    tools = ["web_search", "code_interpreter", "file_reader", "calculator"]
+    queries = [
+        "What is the weather in Seattle?",
+        "Summarize the latest OpenSearch release notes",
+        "Write a Python function to parse JSON",
+        "Calculate the ROI of migrating to OpenSearch",
+    ]
+
+    def run_agent_trace():
+        idx = random.randint(0, len(models) - 1)
+        query = random.choice(queries)
+        with tracer.start_as_current_span("invoke_agent", attributes={
+            "gen_ai.operation.name": "invoke_agent",
+            "gen_ai.agent.name": "canary-planner",
+        }) as agent_span:
+            time.sleep(random.uniform(0.05, 0.2))
+            # LLM call
+            with tracer.start_as_current_span("chat", attributes={
+                "gen_ai.operation.name": "chat",
+                "gen_ai.request.model": models[idx],
+                "gen_ai.system": providers[idx],
+                "gen_ai.usage.input_tokens": random.randint(100, 500),
+                "gen_ai.usage.output_tokens": random.randint(50, 300),
+            }):
+                time.sleep(random.uniform(0.1, 0.5))
+            # Tool call
+            tool = random.choice(tools)
+            with tracer.start_as_current_span("execute_tool", attributes={
+                "gen_ai.operation.name": "execute_tool",
+                "gen_ai.tool.name": tool,
+            }):
+                time.sleep(random.uniform(0.05, 0.3))
+            # Final LLM call
+            with tracer.start_as_current_span("chat", attributes={
+                "gen_ai.operation.name": "chat",
+                "gen_ai.request.model": models[idx],
+                "gen_ai.system": providers[idx],
+                "gen_ai.usage.input_tokens": random.randint(200, 800),
+                "gen_ai.usage.output_tokens": random.randint(100, 500),
+            }):
+                time.sleep(random.uniform(0.1, 0.4))
+
+    # Generate a batch of traces
+    for _ in range({{ .Values.canary.tracesPerRun | default 5 }}):
+        run_agent_trace()
+    provider.force_flush()
+    print(f"Canary: sent {{ .Values.canary.tracesPerRun | default 5 }} agent traces")
+{{- end }}
