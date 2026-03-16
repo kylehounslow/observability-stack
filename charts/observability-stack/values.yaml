@@ -1,0 +1,231 @@
+# Default values for observability-stack umbrella chart
+# Mirrors the docker-compose setup for Kubernetes deployment
+
+# -- OpenSearch
+opensearch:
+  enabled: true
+  singleNode: true
+  replicas: 1
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "500m"
+  config:
+    opensearch.yml: |
+      plugins.query.datasources.encryption.masterkey: "BTqK4Ytdz67La1kShIKV3Pu9"
+
+# -- OpenSearch Dashboards
+opensearch-dashboards:
+  enabled: true
+  replicas: 1
+  opensearchHosts: "https://{{ .Release.Name }}-opensearch:9200"
+  config:
+    opensearch_dashboards.yml: |
+      server.host: "0.0.0.0"
+      opensearch.hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+      opensearch.ssl.verificationMode: none
+      opensearch.requestHeadersAllowlist: ["securitytenant", "Authorization"]
+      opensearch_security.multitenancy.enabled: false
+      opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+      data_source.enabled: true
+      workspace.enabled: true
+      savedObjects.maxImportPayloadBytes: 10485760
+      server.maxPayloadBytes: 10485760
+
+# -- Data Prepper
+data-prepper:
+  enabled: true
+  pipelineConfig:
+    enabled: true
+    config:
+      # Main OTLP pipeline - receives all telemetry and routes by type
+      otlp-pipeline:
+        delay: 10
+        source:
+          otlp:
+            port: 21890
+            ssl: false
+        route:
+          - logs: 'getEventType() == "LOG"'
+          - traces: 'getEventType() == "TRACE"'
+        sink:
+          - pipeline:
+              name: "otel-logs-pipeline"
+              routes: ["logs"]
+          - pipeline:
+              name: "otel-traces-pipeline"
+              routes: ["traces"]
+
+      otel-logs-pipeline:
+        workers: 5
+        delay: 10
+        source:
+          pipeline:
+            name: "otlp-pipeline"
+        buffer:
+          bounded_blocking: {}
+        processor:
+          - copy_values:
+              entries:
+                - from_key: "time"
+                  to_key: "@timestamp"
+        sink:
+          - opensearch:
+              hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+              username: "admin"
+              password: "{{ .Values.opensearchPassword }}"
+              insecure: true
+              index_type: log-analytics-plain
+
+      otel-traces-pipeline:
+        delay: 100
+        source:
+          pipeline:
+            name: "otlp-pipeline"
+        sink:
+          - pipeline:
+              name: "traces-raw-pipeline"
+          - pipeline:
+              name: "service-map-pipeline"
+
+      traces-raw-pipeline:
+        source:
+          pipeline:
+            name: "otel-traces-pipeline"
+        processor:
+          - otel_traces: {}
+        sink:
+          - opensearch:
+              hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+              username: "admin"
+              password: "{{ .Values.opensearchPassword }}"
+              insecure: true
+              index_type: trace-analytics-plain-raw
+
+      service-map-pipeline:
+        delay: 100
+        source:
+          pipeline:
+            name: "otel-traces-pipeline"
+        processor:
+          - otel_apm_service_map:
+              group_by_attributes: [telemetry.sdk.language]
+              window_duration: 10s
+        route:
+          - otel_apm_service_map_route: 'getEventType() == "SERVICE_MAP"'
+          - service_processed_metrics: 'getEventType() == "METRIC"'
+        sink:
+          - opensearch:
+              hosts: ["https://{{ .Release.Name }}-opensearch:9200"]
+              username: "admin"
+              password: "{{ .Values.opensearchPassword }}"
+              index_type: otel-v2-apm-service-map
+              routes: [otel_apm_service_map_route]
+              insecure: true
+          - prometheus:
+              url: "http://{{ .Release.Name }}-prometheus-server:9090/api/v1/write"
+              threshold:
+                max_events: 500
+                flush_interval: 5s
+              routes: [service_processed_metrics]
+
+# -- OpenTelemetry Collector
+opentelemetry-collector:
+  enabled: true
+  mode: deployment
+  image:
+    repository: "otel/opentelemetry-collector-contrib"
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+            cors:
+              allowed_origins:
+                - "http://*"
+                - "https://*"
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch:
+        timeout: 10s
+        send_batch_size: 1024
+      resourcedetection:
+        detectors: [env]
+      transform:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(name, "\\?.*", "")
+              # Workaround for https://github.com/opensearch-project/data-prepper/issues/5616
+              - set(attributes["error_type"], attributes["error.type"]) where attributes["error.type"] != nil
+              - delete_key(attributes, "error.type")
+        log_statements:
+          - context: log
+            statements:
+              - flatten(body) where IsMap(body)
+              - set(body, ToKeyValueString(body)) where IsMap(body)
+    exporters:
+      debug:
+        verbosity: detailed
+      otlp/opensearch:
+        endpoint: "{{ .Release.Name }}-data-prepper:21890"
+        tls:
+          insecure: true
+      otlphttp/prometheus:
+        endpoint: "http://{{ .Release.Name }}-prometheus-server:9090/api/v1/otlp"
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [resourcedetection, memory_limiter, transform, batch]
+          exporters: [otlp/opensearch, debug]
+        metrics:
+          receivers: [otlp]
+          processors: [resourcedetection, memory_limiter, batch]
+          exporters: [otlphttp/prometheus, debug]
+        logs:
+          receivers: [otlp]
+          processors: [resourcedetection, memory_limiter, transform, batch]
+          exporters: [otlp/opensearch, debug]
+
+  ports:
+    otlp:
+      enabled: true
+      containerPort: 4317
+      servicePort: 4317
+      protocol: TCP
+    otlp-http:
+      enabled: true
+      containerPort: 4318
+      servicePort: 4318
+      protocol: TCP
+
+# -- Prometheus
+prometheus:
+  enabled: true
+  server:
+    persistentVolume:
+      enabled: false
+    extraFlags:
+      - "web.enable-remote-write-receiver"
+      - "web.enable-otlp-receiver"
+  alertmanager:
+    enabled: false
+  kube-state-metrics:
+    enabled: false
+  prometheus-node-exporter:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+
+# -- Global settings
+opensearchPassword: "My_password_123!@#"
