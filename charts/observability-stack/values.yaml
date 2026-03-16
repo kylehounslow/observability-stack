@@ -6,6 +6,9 @@ opensearch:
   enabled: true
   singleNode: true
   replicas: 1
+  image:
+    repository: "opensearchstaging/opensearch"
+    tag: "3.6.0"
   resources:
     requests:
       memory: "2Gi"
@@ -21,6 +24,9 @@ opensearch:
 opensearch-dashboards:
   enabled: true
   replicas: 1
+  image:
+    repository: "opensearchstaging/opensearch-dashboards"
+    tag: "3.6.0"
   opensearchHosts: "https://opensearch-cluster-master:9200"
   config:
     opensearch_dashboards.yml: |
