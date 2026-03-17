@@ -47,6 +47,8 @@ spec:
           volumeMounts:
             - name: init-script
               mountPath: /scripts
+            - name: init-script
+              mountPath: /config
       volumes:
         - name: init-script
           configMap:
