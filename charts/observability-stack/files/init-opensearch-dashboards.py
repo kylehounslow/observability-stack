@@ -954,12 +954,11 @@ def create_overview_dashboard(workspace_id):
     dashboard_id = "observability-overview-dashboard"
 
     # Check if dashboard already exists
-    if get_existing_dashboard(workspace_id, dashboard_id):
-        print("✅ Overview dashboard already exists")
-        set_default_dashboard(workspace_id, dashboard_id)
-        return dashboard_id
-
-    print("📊 Creating Observability Stack overview dashboard...")
+    existing = get_existing_dashboard(workspace_id, dashboard_id)
+    if existing:
+        print("🔄 Overview dashboard exists, updating...")
+    else:
+        print("📊 Creating Observability Stack overview dashboard...")
 
     # Load architecture image as base64 data URI
     arch_img_tag = ""
@@ -1050,7 +1049,7 @@ Monitor agent activity, token usage, and tool execution at a glance.
 
     try:
         response = requests.post(
-            vis_url,
+            vis_url + "?overwrite=true",
             auth=(USERNAME, PASSWORD),
             headers={"Content-Type": "application/json", "osd-xsrf": "true"},
             json=vis_payload,

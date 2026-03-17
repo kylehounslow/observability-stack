@@ -12,4 +12,10 @@ metadata:
 data:
   init-opensearch-dashboards.py: |
 {{ .Files.Get "files/init-opensearch-dashboards.py" | indent 4 }}
+  saved-queries-traces.yaml: |
+{{ .Files.Get "files/saved-queries-traces.yaml" | indent 4 }}
+  saved-queries-metrics.yaml: |
+{{ .Files.Get "files/saved-queries-metrics.yaml" | indent 4 }}
+binaryData:
+  architecture.png: {{ .Files.Get "files/architecture.png" | b64enc }}
 {{- end }}
