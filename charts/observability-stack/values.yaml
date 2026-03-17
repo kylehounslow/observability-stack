@@ -283,9 +283,17 @@ prometheus:
 opensearchUsername: "admin"
 opensearchPassword: "My_password_123!@#"
 
-# -- Canary agent (generates sample GenAI traces on a schedule)
-canary:
+# -- Example agents (matches docker-compose.examples.yml)
+examples:
   enabled: true
-  schedule: "*/2 * * * *"
-  serviceName: "example-canary-agent"
-  tracesPerRun: 5
+  weatherAgent:
+    image: "example-weather-agent:latest"
+  eventsAgent:
+    image: "example-events-agent:latest"
+  travelPlanner:
+    image: "example-travel-planner:latest"
+  mcpServer:
+    image: "example-mcp-server:latest"
+  canary:
+    image: "example-canary:latest"
+    interval: "120"
