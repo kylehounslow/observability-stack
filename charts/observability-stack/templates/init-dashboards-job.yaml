@@ -42,6 +42,8 @@ spec:
               value: "{{ .Release.Name }}-prometheus-server"
             - name: PROMETHEUS_PORT
               value: "80"
+            - name: OPENSEARCH_ENDPOINT
+              value: "https://opensearch-cluster-master:9200"
           volumeMounts:
             - name: init-script
               mountPath: /scripts

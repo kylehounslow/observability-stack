@@ -376,7 +376,7 @@ def create_opensearch_datasource(workspace_id):
 
     print("🔧 Creating OpenSearch datasource...")
 
-    opensearch_endpoint = "https://opensearch:9200"
+    opensearch_endpoint = os.environ.get("OPENSEARCH_ENDPOINT", "https://opensearch:9200")
 
     payload = {
         "attributes": {
