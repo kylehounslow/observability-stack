@@ -64,3 +64,13 @@ scrape_configs:
           component: 'telemetry-ingestion'
     # Scrape more frequently for real-time monitoring
     scrape_interval: 10s
+
+  # Scrape OpenSearch metrics via prometheus-opensearch-exporter
+  # Monitors cluster health, JVM, indexing rate, search latency
+  - job_name: 'opensearch'
+    static_configs:
+      - targets: ['opensearch-exporter:9114']
+        labels:
+          service: 'opensearch'
+          component: 'search-storage'
+    scrape_interval: 30s

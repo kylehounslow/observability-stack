@@ -1,0 +1,73 @@
+# Observability Pipeline Health Dashboard — OTel Collector and Prometheus self-monitoring
+
+dashboard:
+  id: observability-pipeline-health-dashboard
+  title: Observability Pipeline Health
+  description: OTel Collector throughput, Prometheus ingestion, and pipeline health
+
+panels:
+  # --- Row 1: OTel Collector Throughput ---
+  - id: pipeline-otel-spans-received
+    title: "OTel Spans Received/sec"
+    query: "rate(otelcol_receiver_accepted_spans_total[5m])"
+    chartType: line
+
+  - id: pipeline-otel-spans-exported
+    title: "OTel Spans Exported/sec"
+    query: "rate(otelcol_exporter_sent_spans_total[5m])"
+    chartType: line
+
+  # --- Row 2: OTel Metrics & Failures ---
+  - id: pipeline-otel-metrics-received
+    title: "OTel Metrics Received/sec"
+    query: "rate(otelcol_receiver_accepted_metric_points_total[5m])"
+    chartType: line
+
+  - id: pipeline-otel-spans-dropped
+    title: "OTel Spans Dropped/sec"
+    query: "rate(otelcol_exporter_send_failed_spans_total[5m])"
+    chartType: line
+
+  # --- Row 3: OTel Collector Resources ---
+  - id: pipeline-otel-queue-size
+    title: "OTel Exporter Queue Size"
+    query: "otelcol_exporter_queue_size"
+    chartType: line
+
+  - id: pipeline-otel-collector-memory
+    title: "OTel Collector Memory (bytes)"
+    query: "otelcol_process_memory_rss_bytes"
+    chartType: line
+
+  # --- Row 4: OTel Collector CPU & Uptime ---
+  - id: pipeline-otel-collector-cpu
+    title: "OTel Collector CPU Usage"
+    query: "rate(otelcol_process_cpu_seconds_total[5m])"
+    chartType: line
+
+  - id: pipeline-otel-batch-cardinality
+    title: "OTel Batch Metadata Cardinality"
+    query: "otelcol_processor_batch_metadata_cardinality"
+    chartType: line
+
+  # --- Row 5: Prometheus Health ---
+  - id: pipeline-prometheus-ingestion
+    title: "Prometheus Ingestion Rate (samples/sec)"
+    query: "rate(prometheus_tsdb_head_samples_appended_total[5m])"
+    chartType: line
+
+  - id: pipeline-prometheus-active-series
+    title: "Prometheus Active Time Series"
+    query: "prometheus_tsdb_head_series"
+    chartType: line
+
+  # --- Row 6: Prometheus Storage ---
+  - id: pipeline-prometheus-storage
+    title: "Prometheus Storage Size (bytes)"
+    query: "prometheus_tsdb_storage_blocks_bytes"
+    chartType: line
+
+  - id: pipeline-prometheus-query-latency
+    title: "Prometheus Query Latency P99 (sec)"
+    query: "histogram_quantile(0.99, rate(prometheus_http_request_duration_seconds_bucket{handler=\"/api/v1/query\"}[5m]))"
+    chartType: line
