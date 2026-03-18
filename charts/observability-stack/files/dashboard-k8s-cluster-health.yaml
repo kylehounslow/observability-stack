@@ -1,0 +1,37 @@
+# Kubernetes Cluster Health Dashboard — Node and pod infrastructure metrics
+
+dashboard:
+  id: k8s-cluster-health-dashboard
+  title: Kubernetes Cluster Health
+  description: Node resources, pod health, and container status
+
+panels:
+  - id: k8s-node-count
+    title: "Node Count"
+    query: "count(kube_node_info)"
+    chartType: line
+
+  - id: k8s-pod-restarts
+    title: "Container Restarts (1h)"
+    query: "increase(kube_pod_container_status_restarts_total{namespace=\"observability-stack\"}[1h])"
+    chartType: line
+
+  - id: k8s-node-cpu-usage
+    title: "Node CPU Usage %"
+    query: "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"
+    chartType: line
+
+  - id: k8s-node-memory-usage
+    title: "Node Memory Usage %"
+    query: "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)"
+    chartType: line
+
+  - id: k8s-node-disk-usage
+    title: "Node Disk Usage %"
+    query: "100 - (node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"} * 100)"
+    chartType: line
+
+  - id: k8s-node-network-receive
+    title: "Node Network Receive (bytes/sec)"
+    query: "rate(node_network_receive_bytes_total{device!=\"lo\"}[5m])"
+    chartType: line

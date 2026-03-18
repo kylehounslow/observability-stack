@@ -1,0 +1,47 @@
+# Observability Pipeline Health Dashboard — OTel Collector and Prometheus self-monitoring
+
+dashboard:
+  id: observability-pipeline-health-dashboard
+  title: Observability Pipeline Health
+  description: OTel Collector throughput, Prometheus ingestion, and pipeline health
+
+panels:
+  - id: pipeline-otel-spans-received
+    title: "OTel Spans Received/sec"
+    query: "rate(otelcol_receiver_accepted_spans_total[5m])"
+    chartType: line
+
+  - id: pipeline-otel-spans-exported
+    title: "OTel Spans Exported/sec"
+    query: "rate(otelcol_exporter_sent_spans_total[5m])"
+    chartType: line
+
+  - id: pipeline-otel-metrics-received
+    title: "OTel Metrics Received/sec"
+    query: "rate(otelcol_receiver_accepted_metric_points_total[5m])"
+    chartType: line
+
+  - id: pipeline-otel-queue-size
+    title: "OTel Exporter Queue Size"
+    query: "otelcol_exporter_queue_size"
+    chartType: line
+
+  - id: pipeline-prometheus-ingestion
+    title: "Prometheus Ingestion Rate (samples/sec)"
+    query: "rate(prometheus_tsdb_head_samples_appended_total[5m])"
+    chartType: line
+
+  - id: pipeline-prometheus-active-series
+    title: "Prometheus Active Time Series"
+    query: "prometheus_tsdb_head_series"
+    chartType: line
+
+  - id: pipeline-prometheus-storage
+    title: "Prometheus Storage Size (bytes)"
+    query: "prometheus_tsdb_storage_blocks_bytes"
+    chartType: line
+
+  - id: pipeline-otel-collector-memory
+    title: "OTel Collector Memory (bytes)"
+    query: "otelcol_process_memory_rss_bytes"
+    chartType: line
