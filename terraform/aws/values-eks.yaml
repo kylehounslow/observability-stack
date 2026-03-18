@@ -1,0 +1,23 @@
+opensearch:
+  persistence:
+    storageClass: gp2
+
+opensearch-dashboards:
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    hosts:
+      - paths:
+          - path: /
+            backend:
+              servicePort: 5601
+
+gateway:
+  enabled: false
+
+examples:
+  enabled: false

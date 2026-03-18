@@ -1,0 +1,13 @@
+# All optional. Just `terraform apply` for a working stack on plain HTTP.
+# Uncomment domain + route53_zone_id to enable HTTPS.
+
+# domain          = "obs.example.com"
+# route53_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# region             = "us-west-2"
+# cluster_name       = "observability-stack"
+# node_instance_type = "m5.xlarge"
+# node_count         = 2
+# enable_waf         = false
+# anonymous_auth     = false
+# enable_examples    = false
