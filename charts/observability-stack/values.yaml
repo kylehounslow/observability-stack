@@ -256,6 +256,11 @@ opentelemetry-collector:
       containerPort: 4318
       servicePort: 4318
       protocol: TCP
+    metrics:
+      enabled: true
+      containerPort: 8888
+      servicePort: 8888
+      protocol: TCP
 
 # -- Prometheus
 prometheus:
@@ -266,12 +271,77 @@ prometheus:
     extraFlags:
       - "web.enable-remote-write-receiver"
       - "web.enable-otlp-receiver"
+    global:
+      scrape_interval: 60s
+      scrape_timeout: 10s
+      evaluation_interval: 60s
+      external_labels:
+        cluster: 'observability-stack'
+        environment: 'development'
+  # Disable default K8s scrape configs — they add ~60k series from API server internals.
+  # We keep node-exporter and kube-state-metrics (scraped via service endpoints below),
+  # and add explicit scrape for OTel Collector and Prometheus self-monitoring.
+  scrapeConfigs:
+    # Disable noisy defaults
+    kubernetes-api-servers: { enabled: false }
+    kubernetes-nodes: { enabled: false }
+    kubernetes-nodes-cadvisor: { enabled: false }
+    kubernetes-pods: { enabled: false }
+    kubernetes-pods-slow: { enabled: false }
+    kubernetes-service-endpoints: { enabled: false }
+    kubernetes-service-endpoints-slow: { enabled: false }
+    kubernetes-services: { enabled: false }
+    prometheus-pushgateway: { enabled: false }
+    # Keep self-monitoring + OTel Collector
+    prometheus:
+      static_configs:
+        - targets: ['localhost:9090']
+    otel-collector:
+      static_configs:
+        - targets: ['obs-stack-opentelemetry-collector:8888']
+      scrape_interval: 10s
+    node-exporter:
+      kubernetes_sd_configs:
+        - role: endpoints
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          regex: obs-stack-prometheus-node-exporter
+          action: keep
+    kube-state-metrics:
+      kubernetes_sd_configs:
+        - role: endpoints
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_name]
+          regex: obs-stack-kube-state-metrics
+          action: keep
+        - source_labels: [__meta_kubernetes_endpoint_port_name]
+          regex: http
+          action: keep
+  scrapeConfigFiles: []
+  serverFiles:
+    prometheus.yml:
+      otlp:
+        keep_identifying_resource_attributes: true
+        promote_resource_attributes:
+          - service.instance.id
+          - service.name
+          - service.namespace
+          - service.version
+          - deployment.environment.name
+          - gen_ai.agent.id
+          - gen_ai.agent.name
+          - gen_ai.provider.name
+          - gen_ai.request.model
+          - gen_ai.response.model
+      storage:
+        tsdb:
+          out_of_order_time_window: 30m
   alertmanager:
     enabled: false
   kube-state-metrics:
-    enabled: false
+    enabled: true
   prometheus-node-exporter:
-    enabled: false
+    enabled: true
   prometheus-pushgateway:
     enabled: false
 
