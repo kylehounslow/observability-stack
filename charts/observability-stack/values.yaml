@@ -300,6 +300,10 @@ prometheus:
       static_configs:
         - targets: ['obs-stack-opentelemetry-collector:8888']
       scrape_interval: 10s
+    opensearch:
+      static_configs:
+        - targets: ['obs-stack-observability-stack-opensearch-exporter:9114']
+      scrape_interval: 30s
     node-exporter:
       kubernetes_sd_configs:
         - role: endpoints
@@ -352,6 +356,13 @@ prometheus:
 # is duplicated there — update both if you change it.
 opensearchUsername: "admin"
 opensearchPassword: "My_password_123!@#"
+
+# -- OpenSearch Prometheus Exporter
+opensearchExporter:
+  enabled: true
+  image:
+    repository: prometheuscommunity/elasticsearch-exporter
+    tag: v1.10.0
 
 # -- Example agents (matches docker-compose.examples.yml)
 examples:
