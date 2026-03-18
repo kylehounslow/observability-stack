@@ -1339,6 +1339,9 @@ def main():
     # Create observability pipeline health dashboard
     create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-pipeline-health.yaml")
 
+    # Create OpenSearch cluster health dashboard
+    create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-opensearch-health.yaml")
+
     # Create saved queries for common agent observability patterns
     create_default_saved_queries(workspace_id)
 
