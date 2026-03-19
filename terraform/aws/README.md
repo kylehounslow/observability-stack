@@ -76,6 +76,18 @@ kubectl port-forward -n observability-stack svc/obs-stack-opentelemetry-collecto
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
 ```
 
+## Add OpenTelemetry Demo
+
+To deploy the [OTel Demo](https://opentelemetry.io/docs/demo/) microservices app alongside the stack:
+
+```bash
+cd terraform/aws
+helm upgrade obs-stack ../../charts/observability-stack -n observability-stack -f values-eks.yaml \
+  --set opentelemetry-demo.enabled=true --no-hooks
+```
+
+Adds 20+ services generating realistic e-commerce telemetry (~2GB additional memory). All demo telemetry flows through the stack's OTel Collector — no duplicate backends.
+
 ## Destroy
 
 ```bash
