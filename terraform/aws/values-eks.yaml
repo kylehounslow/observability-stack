@@ -26,10 +26,9 @@ opensearch-dashboards:
             backend:
               servicePort: 5601
 
-# Examples disabled — images use imagePullPolicy: Never which doesn't work on EKS.
-# Enable after pushing images to a registry (ECR/GHCR).
+# Examples — pulls from GHCR (public images built by .github/workflows/publish-images.yml)
 examples:
-  enabled: false
+  enabled: true
 
 # Gateway not needed — ALB handles ingress directly.
 gateway:

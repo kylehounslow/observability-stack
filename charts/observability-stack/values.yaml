@@ -383,16 +383,17 @@ opensearchExporter:
 # -- Example agents (matches docker-compose.examples.yml)
 examples:
   enabled: true
+  imagePullPolicy: IfNotPresent
   weatherAgent:
-    image: "example-weather-agent:latest"
+    image: "ghcr.io/kylehounslow/observability-stack/weather-agent:latest"
   eventsAgent:
-    image: "example-events-agent:latest"
+    image: "ghcr.io/kylehounslow/observability-stack/events-agent:latest"
   travelPlanner:
-    image: "example-travel-planner:latest"
+    image: "ghcr.io/kylehounslow/observability-stack/travel-planner:latest"
   mcpServer:
-    image: "example-mcp-server:latest"
+    image: "ghcr.io/kylehounslow/observability-stack/mcp-server:latest"
   canary:
-    image: "example-canary:latest"
+    image: "ghcr.io/kylehounslow/observability-stack/canary:latest"
     interval: "120"
 
 # -- Gateway API for OpenSearch Dashboards
