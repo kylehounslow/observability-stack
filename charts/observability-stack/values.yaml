@@ -2,6 +2,12 @@
 # Mirrors the docker-compose setup for Kubernetes deployment
 
 # -- OpenSearch
+# Sizing guide:
+#   Storage: daily_ingest_GB × 1.45 × (replicas + 1) × retention_days
+#   Shards:  30–50 GB per shard for logs/traces, 10–30 GB for search
+#   JVM:     50% of node RAM, max ~31 GB (set via OPENSEARCH_JAVA_OPTS)
+#   Nodes:   minimum 3 for production, 1 for dev/demo
+#   Heap-to-shard ratio: max 25 shards per GB of JVM heap
 opensearch:
   enabled: true
   singleNode: true
@@ -13,9 +19,16 @@ opensearch:
     requests:
       memory: "2Gi"
       cpu: "500m"
+  persistence:
+    enabled: true
+    size: 8Gi                    # Increase for production (e.g. 100Gi, 500Gi)
+    # storageClass: "gp3"       # Uncomment for AWS gp3 (better IOPS/$ than gp2)
   extraEnvs:
     - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
       value: "My_password_123!@#"
+    # JVM heap — set to 50% of resources.requests.memory, max 31g
+    - name: OPENSEARCH_JAVA_OPTS
+      value: "-Xms1g -Xmx1g"
   config:
     opensearch.yml: |
       plugins.query.datasources.encryption.masterkey: "BTqK4Ytdz67La1kShIKV3Pu9"
@@ -135,6 +148,10 @@ data-prepper:
               password: "My_password_123!@#"
               insecure: true
               index_type: log-analytics-plain
+              # Shard tuning — adjust for ingest volume:
+              #   1 shard handles ~30-50 GB for logs. Scale shards with data node count.
+              # number_of_shards: 1
+              # number_of_replicas: 1
 
       otel-traces-pipeline:
         delay: 100
@@ -160,6 +177,8 @@ data-prepper:
               password: "My_password_123!@#"
               insecure: true
               index_type: trace-analytics-plain-raw
+              # number_of_shards: 1
+              # number_of_replicas: 1
 
       service-map-pipeline:
         delay: 100
@@ -277,8 +296,11 @@ opentelemetry-collector:
 prometheus:
   enabled: true
   server:
+    # Retention — how long Prometheus keeps metrics. Increase for longer history.
+    retention: "15d"
     persistentVolume:
-      enabled: false
+      enabled: false               # Enable for production (survives pod restarts)
+      # size: 50Gi
     extraFlags:
       - "web.enable-remote-write-receiver"
       - "web.enable-otlp-receiver"

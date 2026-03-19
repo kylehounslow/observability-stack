@@ -102,6 +102,61 @@ Configured via `scrapeConfigs` in `values.yaml`. Default K8s scrape jobs are dis
 
 > **Note:** Targets use the helm release name as prefix. The values in `values.yaml` are hardcoded to `obs-stack-*` — update them if you change the release name.
 
+## Sizing Guide
+
+The default values are tuned for development/demo (single-node OpenSearch, minimal resources). For production or enterprise-scale deployments, adjust the following knobs.
+
+### OpenSearch Cluster
+
+| Knob | Default | Production Guidance |
+|------|---------|---------------------|
+| `opensearch.replicas` | `1` | 3+ data nodes minimum for HA |
+| `opensearch.singleNode` | `true` | Set `false` for multi-node |
+| `opensearch.resources.requests.memory` | `2Gi` | 8–64Gi per node (JVM gets 50%) |
+| `opensearch.persistence.size` | `8Gi` | Size per formula below |
+| `opensearch.extraEnvs[OPENSEARCH_JAVA_OPTS]` | `-Xms1g -Xmx1g` | 50% of node RAM, max 31g |
+
+**Storage formula:**
+```
+storage_per_node = (daily_ingest_GB × 1.45 × (replicas + 1) × retention_days) / node_count
+```
+The 1.45x multiplier accounts for indexing overhead (10%), OS reserved space for merges (20%), filesystem overhead (5%), and node failure buffer (10%).
+
+**Shard sizing:**
+- Logs/traces (write-heavy): 30–50 GB per primary shard
+- Search (latency-sensitive): 10–30 GB per primary shard
+- Total shards should be a multiple of data node count
+- Max 25 shards per GB of JVM heap
+
+Shard count is configurable per Data Prepper pipeline sink via `number_of_shards` and `number_of_replicas` (commented out in `values.yaml`).
+
+### Data Prepper Pipeline Tuning
+
+| Knob | Default | Description |
+|------|---------|-------------|
+| `data-prepper.pipelineConfig.config.otel-logs-pipeline.workers` | `5` | Parallel log processing threads |
+| `...opensearch.number_of_shards` | (OS default: 1) | Primary shards per index |
+| `...opensearch.number_of_replicas` | (OS default: 1) | Replica shards per primary |
+| `...opensearch.bulk_size` | `5` (MiB) | Bulk request size to OpenSearch |
+
+### Prometheus
+
+| Knob | Default | Description |
+|------|---------|-------------|
+| `prometheus.server.retention` | `15d` | How long metrics are kept |
+| `prometheus.server.persistentVolume.enabled` | `false` | Enable for production |
+| `prometheus.server.persistentVolume.size` | `8Gi` | Disk for metrics TSDB |
+
+### Quick Reference: Sizing Profiles
+
+| Profile | OS Nodes | OS Memory | OS Disk | Prometheus Retention |
+|---------|----------|-----------|---------|---------------------|
+| **Dev/Demo** (default) | 1 | 2Gi | 8Gi | 15d |
+| **Small team** (~10 GB/day) | 3 | 8Gi | 100Gi | 30d |
+| **Enterprise** (~100 GB/day) | 6+ | 32Gi | 500Gi+ | 90d |
+
+Sources: [OpenSearch shard sizing](https://opensearch.org/blog/optimize-opensearch-index-shard-size/), [AWS sizing guide](https://docs.aws.amazon.com/prescriptive-guidance/latest/opensearch-service-migration/sizing.html), [AWS shard best practices](https://docs.aws.amazon.com/opensearch-service/latest/developerguide/bp-sharding.html)
+
 ## Key Values
 
 See `values.yaml` for all options. Notable settings:
