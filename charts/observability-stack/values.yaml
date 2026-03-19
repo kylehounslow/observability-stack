@@ -64,6 +64,17 @@ data-prepper:
   image:
     repository: "sgguruda62324/opensearch-data-prepper"
     tag: "2.15.0-SNAPSHOT"
+  ports:
+    - name: http-source
+      port: 2021
+    - name: otel-traces
+      port: 21890
+    - name: otel-metrics
+      port: 21891
+    - name: otel-logs
+      port: 21892
+    - name: metrics
+      port: 4900
   config:
     data-prepper-config.yaml: |
       ssl: false
