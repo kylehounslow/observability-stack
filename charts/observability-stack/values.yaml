@@ -396,6 +396,29 @@ examples:
     image: "ghcr.io/kylehounslow/observability-stack/canary:latest"
     interval: "120"
 
+# -- OpenTelemetry Demo (optional)
+# Full microservices e-commerce app that generates realistic telemetry.
+# Disabled by default — adds ~2GB memory. Enable with opentelemetry-demo.enabled=true.
+# All bundled backends (jaeger, grafana, prometheus, opensearch, collector) are disabled —
+# demo services send telemetry to our OTel Collector instead.
+opentelemetry-demo:
+  enabled: false
+  default:
+    envOverrides:
+      - name: OTEL_COLLECTOR_NAME
+        value: obs-stack-opentelemetry-collector
+  # Disable all bundled backends — we use our own stack
+  opentelemetry-collector:
+    enabled: false
+  jaeger:
+    enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false
+  opensearch:
+    enabled: false
+
 # -- Gateway API for OpenSearch Dashboards
 # Requires: Gateway API CRDs + a gateway controller installed on the cluster.
 # Supported providers: envoy (Envoy Gateway), aws (AWS Gateway API Controller).
