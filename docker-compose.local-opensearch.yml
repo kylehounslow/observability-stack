@@ -33,6 +33,10 @@ services:
     volumes:
       # Persist data across container restarts
       - opensearch-data:/usr/share/opensearch/data
+      # Custom security config for anonymous authentication
+      - ./docker-compose/opensearch/opensearch-security/config.yml:/usr/share/opensearch/config/opensearch-security/config.yml
+      - ./docker-compose/opensearch/opensearch-security/roles.yml:/usr/share/opensearch/config/opensearch-security/roles.yml
+      - ./docker-compose/opensearch/opensearch-security/roles_mapping.yml:/usr/share/opensearch/config/opensearch-security/roles_mapping.yml
     ports:
       # REST API endpoint
       - "${OPENSEARCH_PORT}:9200"

@@ -31,6 +31,9 @@ opensearch.pingTimeout: 3000
 # Allow requests from any origin for development
 opensearch.requestHeadersAllowlist: [authorization, securitytenant]
 
+# Anonymous authentication - skip login page for read-only access
+opensearch_security.auth.anonymous_auth_enabled: true
+
 # Multi-tenancy configuration
 # Disabled for simpler development setup
 opensearch_security.multitenancy.enabled: false
