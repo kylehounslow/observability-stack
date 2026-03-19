@@ -901,6 +901,36 @@ When creating examples or documentation, always reference the OpenTelemetry Gen-
 6. **Commit**: Use descriptive commit messages
 7. **Submit PR**: Follow CONTRIBUTING.md guidelines
 
+
+## Multi-Agent Development with Worktrees
+
+When multiple agents or sessions work on this repo simultaneously, each feature branch gets its own worktree for isolation.
+
+### Structure
+
+```
+observability-stack/
+├── .worktrees/                    # gitignored — one per feature branch
+│   ├── feat-self-monitoring/
+│   ├── feat-helm-charts/
+│   └── fix-docs/
+└── ...                            # main branch
+```
+
+### Usage
+
+```bash
+# Create
+mkdir -p .worktrees
+git worktree add .worktrees/<branch-name> <branch-name>
+
+# REQUIRED: Clean up after PR merge
+git worktree remove .worktrees/<branch-name>
+git branch -d <branch-name>
+```
+
+**You MUST remove worktrees after their PR is merged.** Stale worktrees waste disk space and cause confusion about what work is active.
+
 ## Common Pitfalls to Avoid
 
 - ❌ Using `latest` image tags (use specific versions)
