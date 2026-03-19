@@ -1,3 +1,12 @@
+# EKS-specific overrides for the observability-stack helm chart.
+# Used by: helm upgrade obs-stack ... -f values-eks.yaml
+# Used by: terraform/aws/observability-stack.tf (via values = [file(...)])
+#
+# TLS annotations (certificate-arn, listen-ports, ssl-redirect, hostname)
+# are injected conditionally by Terraform via dynamic set blocks — not here.
+
+# gp2 is the default EBS StorageClass on EKS. Without this, OpenSearch PVCs
+# stay Pending because the chart default ("") doesn't match any provisioner.
 opensearch:
   persistence:
     storageClass: gp2
@@ -9,15 +18,19 @@ opensearch-dashboards:
     annotations:
       alb.ingress.kubernetes.io/scheme: internet-facing
       alb.ingress.kubernetes.io/target-type: ip
-      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'  # Terraform overrides to HTTPS:443 when domain is set
     hosts:
-      - paths:
+      - host: ""
+        paths:
           - path: /
             backend:
               servicePort: 5601
 
-gateway:
+# Examples disabled — images use imagePullPolicy: Never which doesn't work on EKS.
+# Enable after pushing images to a registry (ECR/GHCR).
+examples:
   enabled: false
 
-examples:
+# Gateway not needed — ALB handles ingress directly.
+gateway:
   enabled: false
