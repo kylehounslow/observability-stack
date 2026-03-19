@@ -19,7 +19,7 @@ spec:
       containers:
         - name: mcp-server
           image: {{ .Values.examples.mcpServer.image }}
-          imagePullPolicy: Never
+          imagePullPolicy: {{ .Values.examples.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8003
           env:
@@ -60,7 +60,7 @@ spec:
       containers:
         - name: weather-agent
           image: {{ .Values.examples.weatherAgent.image }}
-          imagePullPolicy: Never
+          imagePullPolicy: {{ .Values.examples.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8000
           env:
@@ -103,7 +103,7 @@ spec:
       containers:
         - name: events-agent
           image: {{ .Values.examples.eventsAgent.image }}
-          imagePullPolicy: Never
+          imagePullPolicy: {{ .Values.examples.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8002
           env:
@@ -146,7 +146,7 @@ spec:
       containers:
         - name: travel-planner
           image: {{ .Values.examples.travelPlanner.image }}
-          imagePullPolicy: Never
+          imagePullPolicy: {{ .Values.examples.imagePullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8000
           env:
@@ -193,7 +193,7 @@ spec:
       containers:
         - name: canary
           image: {{ .Values.examples.canary.image }}
-          imagePullPolicy: Never
+          imagePullPolicy: {{ .Values.examples.imagePullPolicy | default "IfNotPresent" }}
           env:
             - name: TRAVEL_PLANNER_URL
               value: "http://travel-planner:8000"
