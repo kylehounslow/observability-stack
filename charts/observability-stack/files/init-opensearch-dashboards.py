@@ -969,7 +969,7 @@ def create_promql_dashboard_from_yaml(workspace_id, config_path, prometheus_data
         "params": {
             "addLegend": True, "addTimeMarker": False, "legendPosition": "bottom",
             "legendTitle": "", "lineMode": "straight", "lineStyle": "line", "lineWidth": 2,
-            "showFullTimeRange": False, "standardAxes": [],
+            "showFullTimeRange": True, "standardAxes": [],
             "thresholdOptions": {"baseColor": "#00BD6B", "thresholds": [], "thresholdStyle": "off"},
             "titleOptions": {"show": False, "titleName": ""},
             "tooltipOptions": {"mode": "all"}

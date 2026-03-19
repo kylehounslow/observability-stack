@@ -53,7 +53,7 @@ panels:
   # --- Row 5: Prometheus Health ---
   - id: pipeline-prometheus-ingestion
     title: "Prometheus Ingestion Rate (samples/sec)"
-    query: "rate(prometheus_tsdb_head_samples_appended_total[5m])"
+    query: "rate(prometheus_tsdb_head_samples_appended_total{type=\"float\"}[5m])"
     chartType: line
 
   - id: pipeline-prometheus-active-series
