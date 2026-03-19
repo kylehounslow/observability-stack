@@ -143,6 +143,7 @@ resource "helm_release" "observability_stack" {
     content {
       name  = "opensearch-dashboards.ingress.annotations.alb\\.ingress\\.kubernetes\\.io/ssl-redirect"
       value = "443"
+      type  = "string"
     }
   }
   dynamic "set" {
