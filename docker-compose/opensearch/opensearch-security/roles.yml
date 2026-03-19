@@ -37,8 +37,8 @@ opendistro_security_anonymous_role:
     - "cluster:admin/opensearch/ppl"
   index_permissions:
     # OpenSearch Dashboards system indices - scoped write access for UI settings and saved objects
-    # Only index (create/upsert) and update are granted; delete is NOT included,
-    # so anonymous users cannot remove existing dashboards, saved queries, or index patterns.
+    # Only index (create/upsert) is granted; update, delete, and bulk are NOT included,
+    # so anonymous users cannot modify or remove existing dashboards, saved queries, or index patterns.
     - index_patterns:
       - ".kibana"
       - ".kibana-6"
