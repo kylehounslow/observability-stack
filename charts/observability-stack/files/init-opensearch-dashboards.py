@@ -5,11 +5,16 @@ import time
 import requests
 import yaml
 
-BASE_URL = os.getenv("BASE_URL", "http://opensearch-dashboards:5601")
+_dashboards_host = os.getenv("OPENSEARCH_DASHBOARDS_HOST", "opensearch-dashboards")
+_dashboards_port = os.getenv("OPENSEARCH_DASHBOARDS_PORT", "5601")
+_dashboards_protocol = os.getenv("OPENSEARCH_DASHBOARDS_PROTOCOL", "http")
+BASE_URL = f"{_dashboards_protocol}://{_dashboards_host}:{_dashboards_port}"
 USERNAME = os.getenv("OPENSEARCH_USER", "admin")
 PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "My_password_123!@#")
 PROMETHEUS_HOST = os.getenv("PROMETHEUS_HOST", "prometheus")
 PROMETHEUS_PORT = os.getenv("PROMETHEUS_PORT", "9090")
+_opensearch_protocol = os.getenv("OPENSEARCH_PROTOCOL", "https")
+OPENSEARCH_ENDPOINT = f"{_opensearch_protocol}://{os.getenv('OPENSEARCH_HOST', 'opensearch')}:{os.getenv('OPENSEARCH_PORT', '9200')}"
 
 def wait_for_dashboards():
     """Wait for OpenSearch Dashboards to be ready"""
@@ -18,7 +23,7 @@ def wait_for_dashboards():
     while True:
         try:
             response = requests.get(
-                f"{BASE_URL}/api/status", auth=(USERNAME, PASSWORD), timeout=5
+                f"{BASE_URL}/api/status", auth=(USERNAME, PASSWORD), timeout=5, verify=False
             )
             if response.status_code == 200:
                 break
@@ -376,7 +381,7 @@ def create_opensearch_datasource(workspace_id):
 
     print("🔧 Creating OpenSearch datasource...")
 
-    opensearch_endpoint = os.environ.get("OPENSEARCH_ENDPOINT", "https://opensearch:9200")
+    opensearch_endpoint = OPENSEARCH_ENDPOINT
 
     payload = {
         "attributes": {
@@ -958,18 +963,16 @@ def create_promql_dashboard_from_yaml(workspace_id, config_path, prometheus_data
 
     dashboard_config = config.get("dashboard", {})
     panel_defs = config.get("panels", [])
-    dashboard_id = dashboard_config.get("id", "k8s-cluster-health-dashboard")
+    dashboard_id = dashboard_config.get("id", "promql-dashboard")
 
-    print(f"📊 Creating {dashboard_config.get('title', 'K8s Cluster Health')} dashboard ({len(panel_defs)} panels)...")
+    print(f"📊 Creating {dashboard_config.get('title', 'PromQL Dashboard')} dashboard ({len(panel_defs)} panels)...")
 
-    # Visualization template for explore panels
     viz_template = json.dumps({
-        "title": "",
-        "chartType": "line",
+        "title": "", "chartType": "line",
         "params": {
             "addLegend": True, "addTimeMarker": False, "legendPosition": "bottom",
             "legendTitle": "", "lineMode": "straight", "lineStyle": "line", "lineWidth": 2,
-            "showFullTimeRange": True, "standardAxes": [],
+            "showFullTimeRange": False, "standardAxes": [],
             "thresholdOptions": {"baseColor": "#00BD6B", "thresholds": [], "thresholdStyle": "off"},
             "titleOptions": {"show": False, "titleName": ""},
             "tooltipOptions": {"mode": "all"}
@@ -978,73 +981,40 @@ def create_promql_dashboard_from_yaml(workspace_id, config_path, prometheus_data
     })
 
     dataset = {
-        "id": prometheus_datasource_title,
-        "title": prometheus_datasource_title,
-        "type": "PROMETHEUS",
-        "language": "PROMQL",
-        "timeFieldName": "Time",
-        "dataSource": {},
-        "signalType": "metrics"
+        "id": prometheus_datasource_title, "title": prometheus_datasource_title,
+        "type": "PROMETHEUS", "language": "PROMQL", "timeFieldName": "Time",
+        "dataSource": {}, "signalType": "metrics"
     }
 
     created_ids = []
     for panel_def in panel_defs:
         panel_id = panel_def["id"]
         search_source = json.dumps({
-            "query": {
-                "query": panel_def["query"],
-                "language": "PROMQL",
-                "dataset": dataset
-            },
-            "filter": [],
-            "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index"
+            "query": {"query": panel_def["query"], "language": "PROMQL", "dataset": dataset},
+            "filter": [], "indexRefName": "kibanaSavedObjectMeta.searchSourceJSON.index"
         })
-
         payload = {
             "attributes": {
-                "title": panel_def["title"],
-                "description": "",
-                "hits": 0,
-                "columns": ["_source"],
-                "sort": [],
-                "version": 1,
-                "type": "metrics",
+                "title": panel_def["title"], "description": "", "hits": 0,
+                "columns": ["_source"], "sort": [], "version": 1, "type": "metrics",
                 "visualization": viz_template,
                 "uiState": json.dumps({"activeTab": "explore_visualization_tab"}),
-                "kibanaSavedObjectMeta": {
-                    "searchSourceJSON": search_source
-                }
+                "kibanaSavedObjectMeta": {"searchSourceJSON": search_source}
             },
-            "references": [{
-                "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
-                "type": "index-pattern",
-                "id": prometheus_datasource_title
-            }]
+            "references": [{"name": "kibanaSavedObjectMeta.searchSourceJSON.index", "type": "index-pattern", "id": prometheus_datasource_title}]
         }
-
         if workspace_id and workspace_id != "default":
             payload["workspaces"] = [workspace_id]
             url = f"{BASE_URL}/w/{workspace_id}/api/saved_objects/explore/{panel_id}"
         else:
             url = f"{BASE_URL}/api/saved_objects/explore/{panel_id}"
-
         try:
-            response = requests.post(
-                url, auth=(USERNAME, PASSWORD),
-                headers={"Content-Type": "application/json", "osd-xsrf": "true"},
-                json=payload, verify=False, timeout=10,
-            )
+            response = requests.post(url, auth=(USERNAME, PASSWORD), headers={"Content-Type": "application/json", "osd-xsrf": "true"}, json=payload, verify=False, timeout=10)
             if response.status_code == 200:
                 created_ids.append(panel_id)
                 print(f"  ✅ {panel_def['title']}")
             elif response.status_code == 409:
-                # Update existing
-                requests.put(
-                    url, auth=(USERNAME, PASSWORD),
-                    headers={"Content-Type": "application/json", "osd-xsrf": "true"},
-                    json={"attributes": payload["attributes"], "references": payload["references"]},
-                    verify=False, timeout=10,
-                )
+                requests.put(url, auth=(USERNAME, PASSWORD), headers={"Content-Type": "application/json", "osd-xsrf": "true"}, json={"attributes": payload["attributes"], "references": payload["references"]}, verify=False, timeout=10)
                 created_ids.append(panel_id)
                 print(f"  🔄 {panel_def['title']} (updated)")
             else:
@@ -1056,52 +1026,33 @@ def create_promql_dashboard_from_yaml(workspace_id, config_path, prometheus_data
         print("⚠️  No panels created, skipping dashboard")
         return None
 
-    # Assemble dashboard — 2 panels per row, 24 units wide each
     panels = []
     references = []
     for i, pid in enumerate(created_ids):
-        panels.append({
-            "version": "3.6.0",
-            "panelIndex": pid,
-            "gridData": {"i": pid, "x": (i % 2) * 24, "y": (i // 2) * 15, "w": 24, "h": 15},
-            "panelRefName": f"panel_{i}"
-        })
+        panels.append({"version": "3.6.0", "panelIndex": pid, "gridData": {"i": pid, "x": (i % 2) * 24, "y": (i // 2) * 15, "w": 24, "h": 15}, "panelRefName": f"panel_{i}"})
         references.append({"name": f"panel_{i}", "type": "explore", "id": pid})
 
     dashboard_payload = {
         "attributes": {
-            "title": dashboard_config.get("title", "Kubernetes Cluster Health"),
+            "title": dashboard_config.get("title", "PromQL Dashboard"),
             "description": dashboard_config.get("description", ""),
             "panelsJSON": json.dumps(panels),
             "optionsJSON": json.dumps({"useMargins": True, "hidePanelTitles": False}),
             "timeRestore": False,
-            "kibanaSavedObjectMeta": {
-                "searchSourceJSON": json.dumps({})
-            }
+            "kibanaSavedObjectMeta": {"searchSourceJSON": json.dumps({})}
         },
         "references": references
     }
-
     if workspace_id and workspace_id != "default":
         dashboard_payload["workspaces"] = [workspace_id]
         url = f"{BASE_URL}/w/{workspace_id}/api/saved_objects/dashboard/{dashboard_id}"
     else:
         url = f"{BASE_URL}/api/saved_objects/dashboard/{dashboard_id}"
-
     try:
-        response = requests.post(
-            url, auth=(USERNAME, PASSWORD),
-            headers={"Content-Type": "application/json", "osd-xsrf": "true"},
-            json=dashboard_payload, verify=False, timeout=10,
-        )
+        response = requests.post(url, auth=(USERNAME, PASSWORD), headers={"Content-Type": "application/json", "osd-xsrf": "true"}, json=dashboard_payload, verify=False, timeout=10)
         if response.status_code in (200, 409):
             if response.status_code == 409:
-                requests.put(
-                    url, auth=(USERNAME, PASSWORD),
-                    headers={"Content-Type": "application/json", "osd-xsrf": "true"},
-                    json={"attributes": dashboard_payload["attributes"], "references": references},
-                    verify=False, timeout=10,
-                )
+                requests.put(url, auth=(USERNAME, PASSWORD), headers={"Content-Type": "application/json", "osd-xsrf": "true"}, json={"attributes": dashboard_payload["attributes"], "references": references}, verify=False, timeout=10)
             print(f"✅ Created {dashboard_config['title']} dashboard ({len(created_ids)} panels)")
             return dashboard_id
         else:
@@ -1121,11 +1072,12 @@ def create_overview_dashboard(workspace_id):
     dashboard_id = "observability-overview-dashboard"
 
     # Check if dashboard already exists
-    existing = get_existing_dashboard(workspace_id, dashboard_id)
-    if existing:
-        print("🔄 Overview dashboard exists, updating...")
-    else:
-        print("📊 Creating Observability Stack overview dashboard...")
+    if get_existing_dashboard(workspace_id, dashboard_id):
+        print("✅ Overview dashboard already exists")
+        set_default_dashboard(workspace_id, dashboard_id)
+        return dashboard_id
+
+    print("📊 Creating Observability Stack overview dashboard...")
 
     # Load architecture image as base64 data URI
     arch_img_tag = ""
@@ -1216,7 +1168,7 @@ Monitor agent activity, token usage, and tool execution at a glance.
 
     try:
         response = requests.post(
-            vis_url + "?overwrite=true",
+            vis_url,
             auth=(USERNAME, PASSWORD),
             headers={"Content-Type": "application/json", "osd-xsrf": "true"},
             json=vis_payload,
@@ -1333,13 +1285,9 @@ def main():
     # Create overview landing dashboard (becomes the new default)
     create_overview_dashboard(workspace_id)
 
-    # Create K8s cluster health dashboard (PromQL explore panels)
+    # Create self-monitoring dashboards (PromQL explore panels)
     create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-k8s-cluster-health.yaml")
-
-    # Create observability pipeline health dashboard
     create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-pipeline-health.yaml")
-
-    # Create OpenSearch cluster health dashboard
     create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-opensearch-health.yaml")
 
     # Create saved queries for common agent observability patterns
