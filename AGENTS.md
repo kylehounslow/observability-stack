@@ -931,6 +931,8 @@ git branch -d <branch-name>
 
 **You MUST remove worktrees after their PR is merged.** Stale worktrees waste disk space and cause confusion about what work is active.
 
+**Terraform limitation:** Terraform state is local and lives in the main repo's `terraform/aws/` directory. It is NOT shared across worktrees. Only run `terraform plan/apply` from the main repo, never from a worktree.
+
 ## Common Pitfalls to Avoid
 
 - ❌ Using `latest` image tags (use specific versions)
