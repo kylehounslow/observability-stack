@@ -123,3 +123,22 @@ prometheus:
     kubernetes-api-servers: { enabled: false }
     # ... etc
 ```
+
+## OpenTelemetry Demo (Optional)
+
+The [OpenTelemetry Demo](https://opentelemetry.io/docs/demo/) is available as an optional subchart. It deploys a full microservices e-commerce app (20+ services) that generates realistic telemetry — useful for load testing and showcasing the stack.
+
+Disabled by default (~2GB additional memory required).
+
+**Enable:**
+```bash
+helm upgrade obs-stack . -n observability-stack -f ../../terraform/aws/values-eks.yaml \
+  --set opentelemetry-demo.enabled=true --no-hooks
+```
+
+**Disable:**
+```bash
+helm upgrade obs-stack . -n observability-stack -f ../../terraform/aws/values-eks.yaml --no-hooks
+```
+
+All bundled backends (Jaeger, Grafana, Prometheus, OpenSearch) in the demo chart are disabled — demo services send telemetry to our OTel Collector. No duplicate infrastructure.
