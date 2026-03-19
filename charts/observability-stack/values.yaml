@@ -304,6 +304,11 @@ prometheus:
       static_configs:
         - targets: ['obs-stack-observability-stack-opensearch-exporter:9114']
       scrape_interval: 30s
+    data-prepper:
+      metrics_path: '/metrics/prometheus'
+      static_configs:
+        - targets: ['obs-stack-data-prepper:4900']
+      scrape_interval: 30s
     node-exporter:
       kubernetes_sd_configs:
         - role: endpoints
