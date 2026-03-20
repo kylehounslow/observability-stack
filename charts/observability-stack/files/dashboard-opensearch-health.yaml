@@ -69,13 +69,13 @@ panels:
 
   - id: os-active-searches
     title: "Active Searches"
-    query: "sum(elasticsearch_indices_search_query_current)"
+    query: "sum(elasticsearch_search_active_queries)"
     chartType: line
 
   # --- Row 7: Search Latency & Fetch ---
   - id: os-search-latency
     title: "Search Latency (sec/query)"
-    query: "sum(rate(elasticsearch_indices_search_query_time_seconds_total[5m])) / sum(rate(elasticsearch_indices_search_query_total[5m]))"
+    query: "rate(elasticsearch_indices_search_query_time_seconds[5m])"
     chartType: line
 
   - id: os-search-fetch-rate
