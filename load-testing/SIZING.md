@@ -85,6 +85,7 @@ With 4x more data, search queries scan more segments and use more heap. Expected
 | 004 | 03-20 | 1 OS + 1 OSD (ALB) | 1000 | 3s+ (broke) | ~0 | OSD 100m CPU |
 | 005 | 03-20 | 1 OS + 3 OSD (ALB) | 1000 | 14.57s | 104 | OS CPU 99% |
 | 006 | 03-20 | 3 OS + 3 OSD (ALB) | 1000 | 10.57s | 143 | Uneven shards |
+| 007 | 03-20 | 3 OS + 3 OSD, 2 replicas | 1000 | **6.32s** | **168** | Primary routing |
 
 ### Key Findings
 1. **OSD is the first bottleneck** — default 100m CPU is unusable under load. Minimum 500m request, 2000m limit.
