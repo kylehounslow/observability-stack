@@ -36,10 +36,17 @@ opensearch:
 # -- OpenSearch Dashboards
 opensearch-dashboards:
   enabled: true
-  replicas: 1
+  replicas: 3
   image:
     repository: "opensearchstaging/opensearch-dashboards"
     tag: "3.6.0"
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
   opensearchHosts: "https://opensearch-cluster-master:9200"
   config:
     opensearch_dashboards.yml: |
