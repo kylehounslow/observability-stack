@@ -1049,10 +1049,10 @@ def create_promql_dashboard_from_yaml(workspace_id, config_path, prometheus_data
     else:
         url = f"{BASE_URL}/api/saved_objects/dashboard/{dashboard_id}"
     try:
+        # Always delete and recreate the dashboard so panel order matches YAML
+        requests.delete(url, auth=(USERNAME, PASSWORD), headers={"osd-xsrf": "true"}, verify=False, timeout=10)
         response = requests.post(url, auth=(USERNAME, PASSWORD), headers={"Content-Type": "application/json", "osd-xsrf": "true"}, json=dashboard_payload, verify=False, timeout=10)
-        if response.status_code in (200, 409):
-            if response.status_code == 409:
-                requests.put(url, auth=(USERNAME, PASSWORD), headers={"Content-Type": "application/json", "osd-xsrf": "true"}, json={"attributes": dashboard_payload["attributes"], "references": references}, verify=False, timeout=10)
+        if response.status_code == 200:
             print(f"✅ Created {dashboard_config['title']} dashboard ({len(created_ids)} panels)")
             return dashboard_id
         else:
