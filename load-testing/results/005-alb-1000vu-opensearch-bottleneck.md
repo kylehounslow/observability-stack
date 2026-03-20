@@ -71,3 +71,28 @@ Scaling OSD from 1×100m to 3×2CPU completely eliminated the OSD bottleneck:
 2. **Increase OpenSearch JVM heap**: 512MB → 2GB+ for query caching
 3. **Consider node roles**: Dedicated cluster-manager, data, and search nodes
 4. Follow OpenSearch official scaling guide for search-heavy workloads
+
+## OpenSearch Scaling Strategy (from official docs)
+
+Reference: [Separate index and search workloads](https://docs.opensearch.org/3.4/tuning-your-cluster/separate-index-and-search-workloads/)
+
+### Option A: Simple horizontal scaling (recommended first step)
+Add more data nodes to spread shards and search threads across nodes. No architecture change needed.
+- Current: 1 node (4 vCPU, 7 search threads, 99% CPU)
+- Target: 3 data nodes → 21 search threads, ~33% CPU each
+
+### Option B: Dedicated search nodes (official OpenSearch approach)
+Requires remote store (S3) + segment replication. Provides full isolation between indexing and search.
+- Configure nodes with `node.roles: [search]`
+- Add `number_of_search_replicas` to indices
+- Search replicas are allocated only to search nodes
+- Enables independent scaling of search vs ingest capacity
+- Can use `_scale` API to turn off write workloads for read-heavy indices
+
+### Option C: Bigger instance type (vertical scaling)
+Switch from m5.xlarge (4 vCPU) to m5.2xlarge (8 vCPU) or r5.2xlarge (8 vCPU, 64GB RAM).
+- Doubles search thread pool immediately
+- More JVM heap for query caching
+- Simplest change but has a ceiling
+
+### Recommended approach: Start with Option A (3 data nodes), then Option C if needed, then Option B for production.
