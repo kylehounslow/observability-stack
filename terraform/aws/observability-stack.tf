@@ -163,6 +163,22 @@ resource "helm_release" "observability_stack" {
     }
   }
 
+  # --- Anonymous auth (conditional) ---
+  dynamic "set" {
+    for_each = var.anonymous_auth ? [1] : []
+    content {
+      name  = "anonymousAuth.enabled"
+      value = "true"
+    }
+  }
+  dynamic "set" {
+    for_each = var.anonymous_auth ? [1] : []
+    content {
+      name  = "global.anonymousAuth.enabled"
+      value = "true"
+    }
+  }
+
   depends_on = [
     helm_release.aws_lb_controller,
   ]

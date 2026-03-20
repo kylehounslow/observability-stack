@@ -1,6 +1,13 @@
 # Default values for observability-stack umbrella chart
 # Mirrors the docker-compose setup for Kubernetes deployment
 
+# -- Anonymous authentication (skip login page for demos/workshops)
+# When enabled, users can access OpenSearch Dashboards without logging in.
+# Anonymous users can browse data, create/modify saved objects, but cannot
+# delete existing saved objects or perform admin operations.
+anonymousAuth:
+  enabled: false
+
 # -- OpenSearch
 # Sizing guide:
 #   Storage: daily_ingest_GB × 1.45 × (replicas + 1) × retention_days
@@ -35,6 +42,9 @@ opensearch:
   config:
     opensearch.yml: |
       plugins.query.datasources.encryption.masterkey: "BTqK4Ytdz67La1kShIKV3Pu9"
+  securityConfig:
+    config:
+      securityConfigSecret: "opensearch-security-config"
 
 # -- OpenSearch Dashboards
 opensearch-dashboards:
@@ -63,6 +73,7 @@ opensearch-dashboards:
       opensearch.requestHeadersAllowlist: ["authorization", "securitytenant"]
       opensearch_security.multitenancy.enabled: false
       opensearch_security.readonly_mode.roles: ["kibana_read_only"]
+      opensearch_security.auth.anonymous_auth_enabled: {{ .Values.global.anonymousAuth.enabled }}
       console.enabled: true
       server.maxPayloadBytes: 1048576
       savedObjects.maxImportPayloadBytes: 26214400
@@ -72,6 +83,11 @@ opensearch-dashboards:
       explore.discoverMetrics.enabled: true
       explore.agentTraces.enabled: true
       workspace.enabled: true
+      {{- if .Values.global.anonymousAuth.enabled }}
+      savedObjects.permission.enabled: false
+      {{- else }}
+      savedObjects.permission.enabled: true
+      {{- end }}
       data_source.enabled: true
       data_source.ssl.verificationMode: none
       datasetManagement.enabled: true
@@ -481,3 +497,10 @@ gateway:
   #   host: dashboards.example.com
   #   annotations:
   #     application-networking.k8s.aws/certificate-arn: arn:aws:acm:REGION:ACCOUNT:certificate/ID
+
+# -- Global values (accessible to all subcharts via .Values.global)
+# Used to pass anonymousAuth.enabled to opensearch-dashboards subchart config
+# which uses tpl() for Go template rendering.
+global:
+  anonymousAuth:
+    enabled: false

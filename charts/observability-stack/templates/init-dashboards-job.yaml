@@ -44,6 +44,8 @@ spec:
               value: "80"
             - name: OPENSEARCH_ENDPOINT
               value: "https://opensearch-cluster-master:9200"
+            - name: OPENSEARCH_ANONYMOUS_AUTH_ENABLED
+              value: {{ .Values.anonymousAuth.enabled | quote }}
           volumeMounts:
             - name: init-script
               mountPath: /scripts
