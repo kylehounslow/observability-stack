@@ -64,21 +64,21 @@ panels:
   # --- Row 6: Query Pressure (Load Testing) ---
   - id: os-thread-pool-rejections
     title: "Thread Pool Rejections/sec"
-    query: "rate(elasticsearch_thread_pool_rejected_count[5m])"
+    query: "sum by (type) (rate(elasticsearch_thread_pool_rejected_count[5m]))"
     chartType: line
 
   - id: os-active-searches
     title: "Active Searches"
-    query: "elasticsearch_indices_search_query_current"
+    query: "sum(elasticsearch_indices_search_query_current)"
     chartType: line
 
   # --- Row 7: Search Latency & Fetch ---
   - id: os-search-latency
     title: "Search Latency (sec/query)"
-    query: "rate(elasticsearch_indices_search_query_time_seconds_total[5m]) / rate(elasticsearch_indices_search_query_total[5m])"
+    query: "sum(rate(elasticsearch_indices_search_query_time_seconds_total[5m])) / sum(rate(elasticsearch_indices_search_query_total[5m]))"
     chartType: line
 
   - id: os-search-fetch-rate
     title: "Search Fetch Rate (fetches/sec)"
-    query: "rate(elasticsearch_indices_search_fetch_total[5m])"
+    query: "sum(rate(elasticsearch_indices_search_fetch_total[5m]))"
     chartType: line
