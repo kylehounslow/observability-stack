@@ -77,28 +77,22 @@ export function osdLoad() {
     check(res, { 'PPL 2xx': (r) => r.status >= 200 && r.status < 300 });
 
   } else if (action < 0.5) {
-    // Discover-style search through OSD
-    const res = http.post(`${OSD}/api/console/proxy`, JSON.stringify({
+    // PPL query on logs
+    const q = pplQueries[Math.floor(Math.random() * pplQueries.length)];
+    const res = http.post(`${OSD}/api/ppl/search`, JSON.stringify({
+      query: q,
+      format: 'jdbc',
+    }), { headers });
+    check(res, { 'PPL logs 2xx': (r) => r.status >= 200 && r.status < 300 });
+
+  } else if (action < 0.7) {
+    // Direct OpenSearch query through OSD (DSL search)
+    const res = http.post(`${OSD}/api/console/proxy?path=${encodeURIComponent('otel-v1-apm-span-*/_search')}&method=POST`, JSON.stringify({
       size: 50,
       query: { match_all: {} },
       sort: [{ startTime: 'desc' }],
-    }), {
-      headers: {
-        ...headers,
-        'opensearch-endpoint': 'otel-v1-apm-span-*/_search',
-      },
-    });
+    }), { headers });
     check(res, { 'Search 2xx': (r) => r.status >= 200 && r.status < 400 });
-
-  } else if (action < 0.7) {
-    // PromQL through OSD datasource proxy
-    const q = promQueries[Math.floor(Math.random() * promQueries.length)];
-    const now = Math.floor(Date.now() / 1000);
-    const res = http.get(
-      `${OSD}/api/datasources/proxy/ObservabilityStack_Prometheus/api/v1/query_range?query=${encodeURIComponent(q)}&start=${now - 3600}&end=${now}&step=60`,
-      { headers },
-    );
-    check(res, { 'PromQL 2xx': (r) => r.status >= 200 && r.status < 300 });
 
   } else if (action < 0.85) {
     // Load saved objects (simulates opening a dashboard)
@@ -110,15 +104,10 @@ export function osdLoad() {
 
   } else {
     // Service map query
-    const res = http.post(`${OSD}/api/console/proxy`, JSON.stringify({
+    const res = http.post(`${OSD}/api/console/proxy?path=${encodeURIComponent('otel-v2-apm-service-map-*/_search')}&method=POST`, JSON.stringify({
       size: 200,
       query: { match_all: {} },
-    }), {
-      headers: {
-        ...headers,
-        'opensearch-endpoint': 'otel-v2-apm-service-map-*/_search',
-      },
-    });
+    }), { headers });
     check(res, { 'ServiceMap 2xx': (r) => r.status >= 200 && r.status < 400 });
   }
 
