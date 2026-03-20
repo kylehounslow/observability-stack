@@ -162,6 +162,10 @@ Sources: [OpenSearch shard sizing](https://opensearch.org/blog/optimize-opensear
 See `values.yaml` for all options. Notable settings:
 
 ```yaml
+# Anonymous auth — skip login page for demos/workshops
+anonymousAuth:
+  enabled: false  # Set true to allow access without credentials
+
 # Credentials (update opensearchPassword before any real deployment)
 opensearchUsername: "admin"
 opensearchPassword: "My_password_123!@#"
@@ -178,6 +182,30 @@ prometheus:
     kubernetes-api-servers: { enabled: false }
     # ... etc
 ```
+
+## Anonymous Authentication
+
+By default, OpenSearch Dashboards requires login. Enable anonymous auth to skip the login page — useful for demos, workshops, or shared dev environments.
+
+```bash
+helm install obs-stack charts/observability-stack \
+  --set anonymousAuth.enabled=true \
+  --set global.anonymousAuth.enabled=true
+```
+
+> **Note:** Both `anonymousAuth.enabled` and `global.anonymousAuth.enabled` must be set. The `global` value is needed because the OpenSearch Dashboards subchart config uses Go templating and can only access global values.
+
+**What anonymous users can do:**
+- Browse all data (logs, traces, metrics)
+- View, create, and modify saved objects (visualizations, dashboards, saved queries)
+- Explore traces and service maps
+- Run queries and access the OpenSearch REST API
+
+**What anonymous users cannot do:**
+- Delete existing saved objects
+- Perform admin operations (user management, security config)
+
+**To disable:** Remove the `--set` flags (or set both to `false`) and redeploy.
 
 ## OpenTelemetry Demo (Optional)
 

@@ -1,0 +1,58 @@
+suite: anonymous authentication
+templates:
+  - templates/opensearch-security-config.yaml
+  - templates/init-dashboards-job.yaml
+tests:
+  # --- Security config Secret ---
+  - it: should set anonymous_auth_enabled to false by default
+    template: templates/opensearch-security-config.yaml
+    asserts:
+      - isKind:
+          of: Secret
+      - matchRegex:
+          path: stringData["config.yml"]
+          pattern: "anonymous_auth_enabled: false"
+
+  - it: should set anonymous_auth_enabled to true when enabled
+    template: templates/opensearch-security-config.yaml
+    set:
+      anonymousAuth.enabled: true
+    asserts:
+      - matchRegex:
+          path: stringData["config.yml"]
+          pattern: "anonymous_auth_enabled: true"
+
+  - it: should always include anonymous role definition
+    template: templates/opensearch-security-config.yaml
+    asserts:
+      - matchRegex:
+          path: stringData["roles.yml"]
+          pattern: "opendistro_security_anonymous_role"
+
+  - it: should always include anonymous role mapping
+    template: templates/opensearch-security-config.yaml
+    asserts:
+      - matchRegex:
+          path: stringData["roles_mapping.yml"]
+          pattern: "opendistro_security_anonymous_backendrole"
+
+  # --- Init job env var ---
+  - it: should pass OPENSEARCH_ANONYMOUS_AUTH_ENABLED=false by default
+    template: templates/init-dashboards-job.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OPENSEARCH_ANONYMOUS_AUTH_ENABLED
+            value: "false"
+
+  - it: should pass OPENSEARCH_ANONYMOUS_AUTH_ENABLED=true when enabled
+    template: templates/init-dashboards-job.yaml
+    set:
+      anonymousAuth.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OPENSEARCH_ANONYMOUS_AUTH_ENABLED
+            value: "true"

@@ -1,0 +1,103 @@
+{{- if index .Values "opensearch" "enabled" }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opensearch-security-config
+  labels:
+    {{- include "observability-stack.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  config.yml: |
+    _meta:
+      type: "config"
+      config_version: 2
+    config:
+      dynamic:
+        http:
+          anonymous_auth_enabled: {{ .Values.anonymousAuth.enabled }}
+          xff:
+            enabled: false
+            internalProxies: "192\\.168\\.0\\.10|192\\.168\\.0\\.11"
+        authc:
+          basic_internal_auth_domain:
+            description: "Authenticate via HTTP Basic against internal users database"
+            http_enabled: true
+            transport_enabled: true
+            order: 4
+            http_authenticator:
+              type: "basic"
+              challenge: true
+            authentication_backend:
+              type: "intern"
+  roles.yml: |
+    _meta:
+      type: "roles"
+      config_version: 2
+    opendistro_security_anonymous_role:
+      reserved: true
+      cluster_permissions:
+        - "read"
+        - "cluster_monitor"
+        - "cluster_composite_ops"
+        - "indices:data/read/scroll*"
+        - "cluster:admin/opensearch/ppl"
+        - "cluster:admin/opensearch/sql"
+        - "cluster:admin/opensearch/ql/datasources/read"
+        - "cluster:admin/opensearch/ql/async_query/read"
+        - "cluster:admin/opensearch/direct_query/read/query"
+      index_permissions:
+        - index_patterns:
+          - ".kibana"
+          - ".kibana-6"
+          - ".kibana_*"
+          - ".opensearch_dashboards"
+          - ".opensearch_dashboards-6"
+          - ".opensearch_dashboards_*"
+          allowed_actions:
+            - "read"
+            - "indices:data/write/index*"
+            - "indices:data/write/update*"
+            - "indices:data/write/bulk*"
+        - index_patterns:
+          - ".tasks"
+          - ".management-beats"
+          - "*:.tasks"
+          - "*:.management-beats"
+          allowed_actions:
+            - "read"
+        - index_patterns:
+          - '*'
+          allowed_actions:
+            - "read"
+            - "indices:data/read/*"
+            - "indices:admin/get"
+            - "indices:admin/exists"
+            - "indices:admin/aliases/exists*"
+            - "indices:admin/aliases/get*"
+            - "indices:admin/mappings/get"
+            - "indices:admin/resolve/index"
+            - "indices:monitor/settings/get"
+            - "indices:monitor/stats"
+      tenant_permissions:
+        - tenant_patterns:
+          - '*'
+          allowed_actions:
+            - "kibana_all_write"
+  roles_mapping.yml: |
+    _meta:
+      type: "rolesmapping"
+      config_version: 2
+    opendistro_security_anonymous_role:
+      backend_roles:
+      - "opendistro_security_anonymous_backendrole"
+    all_access:
+      reserved: true
+      backend_roles:
+      - "admin"
+      description: "Maps admin to all_access"
+    kibana_server:
+      reserved: true
+      users:
+      - "kibanaserver"
+      description: "Maps kibana_server role to kibanaserver user"
+{{- end }}
