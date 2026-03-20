@@ -197,6 +197,10 @@ spec:
           env:
             - name: TRAVEL_PLANNER_URL
               value: "http://travel-planner:8000"
+            - name: WEATHER_AGENT_URL
+              value: "http://weather-agent:8000"
+            - name: EVENTS_AGENT_URL
+              value: "http://events-agent:8002"
             - name: CANARY_INTERVAL
               value: {{ .Values.examples.canary.interval | default "120" | quote }}
           resources:
