@@ -10,15 +10,18 @@
 #   Heap-to-shard ratio: max 25 shards per GB of JVM heap
 opensearch:
   enabled: true
-  singleNode: true
-  replicas: 1
+  singleNode: false
+  replicas: 3
   image:
     repository: "opensearchstaging/opensearch"
     tag: "3.6.0"
   resources:
     requests:
-      memory: "2Gi"
-      cpu: "500m"
+      memory: "4Gi"
+      cpu: "1000m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"
   persistence:
     enabled: true
     size: 8Gi                    # Increase for production (e.g. 100Gi, 500Gi)
@@ -28,7 +31,7 @@ opensearch:
       value: "My_password_123!@#"
     # JVM heap — set to 50% of resources.requests.memory, max 31g
     - name: OPENSEARCH_JAVA_OPTS
-      value: "-Xms1g -Xmx1g"
+      value: "-Xms2g -Xmx2g"
   config:
     opensearch.yml: |
       plugins.query.datasources.encryption.masterkey: "BTqK4Ytdz67La1kShIKV3Pu9"
