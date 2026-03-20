@@ -996,9 +996,6 @@ def create_promql_dashboard_from_yaml(workspace_id, config_path, prometheus_data
         payload = {
             "attributes": {
                 "title": panel_def["title"], "description": "", "hits": 0,
-                "columns": ["_source"], "sort": [], "version": 1, "type": "metrics",
-                "visualization": viz_template,
-                "uiState": json.dumps({"activeTab": "explore_visualization_tab"}),
                 "kibanaSavedObjectMeta": {"searchSourceJSON": search_source}
             },
             "references": [{"name": "kibanaSavedObjectMeta.searchSourceJSON.index", "type": "index-pattern", "id": prometheus_datasource_title}]
