@@ -34,3 +34,4 @@
 | 1 | API Query Load (200 OS VUs + 100 Prom VUs) | 2026-03-20 12:04–12:19 | ⚠️ Auth bug | [001-api-queries-auth-bug.md](results/001-api-queries-auth-bug.md) |
 | 2 | API Query Load (300 VUs, auth fixed) | 2026-03-20 12:42–12:57 | ✅ 0% errors, p95=16ms | [002-api-queries.md](results/002-api-queries.md) |
 | 3 | API Query Load (1500 VUs) | 2026-03-20 12:57–13:12 | ⚠️ p95=2.28s, 0% errors | [003-api-queries-1500vu.md](results/003-api-queries-1500vu.md) |
+| 4 | ALB E2E (1000 VUs from EC2) | 2026-03-20 14:55–14:59 | 🔴 OSD saturated at 100m CPU, 3s+ latency | [004-alb-1000vu-osd-bottleneck.md](results/004-alb-1000vu-osd-bottleneck.md) |
