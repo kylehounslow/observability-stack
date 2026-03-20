@@ -77,6 +77,11 @@ panels:
     query: "histogram_quantile(0.99, rate(prometheus_http_request_duration_seconds_bucket{handler=\"/api/v1/query\"}[5m]))"
     chartType: line
 
+  - id: pipeline-prometheus-range-query-latency
+    title: "Prometheus Range Query Latency P99 (sec)"
+    query: "histogram_quantile(0.99, rate(prometheus_http_request_duration_seconds_bucket{handler=\"/api/v1/query_range\"}[5m]))"
+    chartType: line
+
   # --- Row 7: Data Prepper — Logs Pipeline ---
   - id: pipeline-dp-logs-processed
     title: "DP Logs Processed/sec"
