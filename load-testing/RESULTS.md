@@ -36,10 +36,12 @@
 | 3 | API Query Load (1500 VUs) | 2026-03-20 12:57–13:12 | ⚠️ p95=2.28s, 0% errors | [003-api-queries-1500vu.md](results/003-api-queries-1500vu.md) |
 | 4 | ALB E2E (1000 VUs from EC2) | 2026-03-20 14:55–14:59 | 🔴 OSD saturated at 100m CPU, 3s+ latency | [004-alb-1000vu-osd-bottleneck.md](results/004-alb-1000vu-osd-bottleneck.md) |
 | 5 | ALB E2E (1000 VUs, 3x OSD 2CPU) | 2026-03-20 15:08–15:24 | ⚠️ OSD fixed, OpenSearch at 99% CPU, p95=14.57s | [005-alb-1000vu-opensearch-bottleneck.md](results/005-alb-1000vu-opensearch-bottleneck.md) |
+| 6 | ALB E2E (1000 VUs, 3x OS nodes) | 2026-03-20 15:47–16:02 | ⚠️ 37% better throughput, p95=10.57s, uneven shards | [006-alb-1000vu-3node-opensearch.md](results/006-alb-1000vu-3node-opensearch.md) |
 
 ## Bottleneck Progression
 
 | Test | Bottleneck | Fix Applied | Result |
 |------|-----------|-------------|--------|
 | 004 | OSD (100m CPU, 1 replica) | Scaled to 3 replicas, 2 CPU each | ✅ Resolved |
-| 005 | OpenSearch (single node, 4 vCPU, 99% CPU) | **Next: scale OpenSearch with search/data node separation** | Pending |
+| 005 | OpenSearch (single node, 4 vCPU, 99% CPU) | Scaled to 3 nodes, 2 CPU / 4Gi each | ✅ Improved |
+| 006 | Uneven shard distribution across 3 nodes | **Next: rebalance shards, increase replica count** | Pending |
