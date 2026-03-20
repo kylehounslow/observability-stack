@@ -64,7 +64,7 @@ panels:
   # --- Row 6: Query Pressure (Load Testing) ---
   - id: os-thread-pool-rejections
     title: "Thread Pool Rejections/sec"
-    query: "sum by (type) (rate(elasticsearch_thread_pool_rejected_count[5m]))"
+    query: "sum(rate(elasticsearch_thread_pool_rejected_count[5m]))"
     chartType: line
 
   - id: os-active-searches
