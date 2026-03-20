@@ -417,6 +417,10 @@ examples:
   canary:
     image: "ghcr.io/kylehounslow/observability-stack/canary:latest"
     interval: "120"
+    # -- JSON string controlling trace shape distribution (normal/shallow/deep)
+    # traceShapeWeights: '{"normal":0.60,"shallow":0.25,"deep":0.15}'
+    # -- JSON string controlling fault injection distribution
+    # faultWeights: '{"none":0.50,"weather_error":0.10,"weather_rate_limited":0.08,"weather_high_latency":0.07,"events_error":0.08,"events_rate_limited":0.07,"partial_failure":0.10}'
 
 # -- OpenTelemetry Demo (optional)
 # Full microservices e-commerce app that generates realistic telemetry.

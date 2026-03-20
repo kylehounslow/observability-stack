@@ -203,6 +203,14 @@ spec:
               value: "http://events-agent:8002"
             - name: CANARY_INTERVAL
               value: {{ .Values.examples.canary.interval | default "120" | quote }}
+            {{- if .Values.examples.canary.traceShapeWeights }}
+            - name: TRACE_SHAPE_WEIGHTS
+              value: {{ .Values.examples.canary.traceShapeWeights | quote }}
+            {{- end }}
+            {{- if .Values.examples.canary.faultWeights }}
+            - name: FAULT_WEIGHTS
+              value: {{ .Values.examples.canary.faultWeights | quote }}
+            {{- end }}
           resources:
             limits:
               memory: "100Mi"
