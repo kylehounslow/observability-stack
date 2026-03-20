@@ -1,0 +1,36 @@
+# Load Test Results
+
+## Baseline Topology (2026-03-20)
+
+### Cluster
+- EKS cluster: `observability-stack`, us-west-2
+- Kubernetes: 1.32
+- Nodes: 2x `m5.xlarge` (4 vCPU, 16 GB RAM each = 8 vCPU / 32 GB total)
+
+### Core Stack Pods
+| Component | Replicas | CPU Req | Mem Req | Node |
+|-----------|----------|---------|---------|------|
+| OpenSearch | 1 (single-node) | 500m | 2Gi (JVM: 1g) | node-1 |
+| OpenSearch Dashboards | 1 | 100m | 512M | node-2 |
+| OTel Collector | 1 | none | none | node-2 |
+| Data Prepper | 2 | none | none | node-1, node-2 |
+| Prometheus | 1 (no PV) | none | none | node-2 |
+
+### OpenSearch State
+- Cluster status: yellow (3 unassigned replica shards — expected with single node)
+- Active shards: 14 primary
+- Indices: `otel-v1-apm-span-000001` (111k docs, 57MB), `logs-otel-v1-000001` (7k docs, 12MB), `otel-v2-apm-service-map-000001` (14k docs, 2.8MB)
+
+### Background Load
+- OTel Demo: ~20 microservices generating traces/logs/metrics via built-in load generator
+- Example agents: travel-planner, weather-agent, events-agent, canary
+
+---
+
+## Test Results
+
+| # | Test | Date | Status | Result File |
+|---|------|------|--------|-------------|
+| 1 | API Query Load (200 OS VUs + 100 Prom VUs) | 2026-03-20 12:04–12:19 | ⚠️ Auth bug | [001-api-queries-auth-bug.md](results/001-api-queries-auth-bug.md) |
+| 2 | API Query Load (300 VUs, auth fixed) | 2026-03-20 12:42–12:57 | ✅ 0% errors, p95=16ms | [002-api-queries.md](results/002-api-queries.md) |
+| 3 | API Query Load (1500 VUs) | 2026-03-20 12:57–13:12 | ⚠️ p95=2.28s, 0% errors | [003-api-queries-1500vu.md](results/003-api-queries-1500vu.md) |

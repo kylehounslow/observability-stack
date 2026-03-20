@@ -17,6 +17,7 @@ import { Rate, Trend } from 'k6/metrics';
 const TARGET_VUS = parseInt(__ENV.TARGET_VUS || '200');
 
 export const options = {
+  insecureSkipTLSVerify: true,
   scenarios: {
     opensearch_queries: {
       executor: 'ramping-vus',
@@ -51,24 +52,28 @@ export const options = {
 
 const OS_BASE = __ENV.OPENSEARCH_URL || 'https://localhost:9200';
 const PROM_BASE = __ENV.PROMETHEUS_URL || 'http://localhost:9090';
-const OS_AUTH = { username: 'admin', password: 'My_password_123!@#' };
+
+import encoding from 'k6/encoding';
+const OS_USER = __ENV.OSD_USER || 'admin';
+const OS_PASS = __ENV.OSD_PASSWORD || 'My_password_123!@#';
+const OS_AUTH_HEADER = `Basic ${encoding.b64encode(`${OS_USER}:${OS_PASS}`)}`;
 
 const osParams = {
-  headers: { 'Content-Type': 'application/json' },
-  auth: 'basic',
-  ...OS_AUTH,
-  insecureSkipTLSVerify: true,
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': OS_AUTH_HEADER,
+  },
 };
 
 // --- PPL queries (light → heavy) ---
 const pplQueries = [
   'source=otel-v1-apm-span-000001 | head 50',
   'source=otel-v1-apm-span-000001 | stats count() by serviceName',
-  'source=otel-v1-apm-span-000001 | where serviceName="frontend" | stats avg(durationInNanos) by name',
-  'source=otel-v1-apm-span-000001 | stats count() by serviceName, name | sort - count()',
-  'source=otel-v1-apm-span-000001 | where durationInNanos > 1000000000 | stats count() by serviceName | sort - count()',
+  'source=otel-v1-apm-span-000001 | where serviceName="frontend" | stats avg(durationInNanos)',
+  'source=otel-v1-apm-span-000001 | stats count() by serviceName, kind',
+  'source=otel-v1-apm-span-000001 | where durationInNanos > 1000000000 | stats count() by serviceName',
   'source=logs-otel-v1-000001 | head 50',
-  'source=logs-otel-v1-000001 | stats count() by serviceName',
+  'source=logs-otel-v1-000001 | stats count() by severityText',
 ];
 
 // --- PromQL queries (light → heavy) ---

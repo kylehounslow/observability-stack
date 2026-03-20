@@ -18,6 +18,7 @@ const TARGET_VUS = parseInt(__ENV.TARGET_VUS || '150');
 const BROWSER_VUS = parseInt(__ENV.BROWSER_VUS || '5');
 
 export const options = {
+  insecureSkipTLSVerify: true,
   scenarios: {
     // --- API layer: OpenSearch queries ---
     api_opensearch: {
@@ -90,7 +91,6 @@ const osParams = {
   auth: 'basic',
   username: USERNAME,
   password: PASSWORD,
-  insecureSkipTLSVerify: true,
 };
 
 const pplQueries = [
