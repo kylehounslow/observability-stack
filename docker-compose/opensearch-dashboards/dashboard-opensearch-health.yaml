@@ -68,8 +68,8 @@ panels:
     chartType: line
 
   - id: os-active-searches
-    title: "Active Searches"
-    query: "sum(elasticsearch_search_active_queries)"
+    title: "Query Cache Hit Ratio %"
+    query: "sum(rate(elasticsearch_indices_query_cache_total{result=\"hit\"}[5m])) / sum(rate(elasticsearch_indices_query_cache_total[5m])) * 100"
     chartType: line
 
   # --- Row 7: Search Latency & Fetch ---
@@ -81,4 +81,10 @@ panels:
   - id: os-search-fetch-rate
     title: "Search Fetch Rate (fetches/sec)"
     query: "sum(rate(elasticsearch_indices_search_fetch_total[5m]))"
+    chartType: line
+
+  # --- Row 8: Cache Performance ---
+  - id: os-query-cache-hit-ratio
+    title: "Query Cache Size (entries)"
+    query: "sum(elasticsearch_index_stats_query_cache_size)"
     chartType: line
