@@ -16,6 +16,8 @@ data:
 {{ .Files.Get "files/saved-queries-traces.yaml" | indent 4 }}
   saved-queries-metrics.yaml: |
 {{ .Files.Get "files/saved-queries-metrics.yaml" | indent 4 }}
+  saved-queries-self-monitoring.yaml: |
+{{ .Files.Get "files/saved-queries-self-monitoring.yaml" | indent 4 }}
   dashboard-k8s-cluster-health.yaml: |
 {{ .Files.Get "files/dashboard-k8s-cluster-health.yaml" | indent 4 }}
   dashboard-pipeline-health.yaml: |
