@@ -20,6 +20,8 @@ opensearch:
       memory: "4Gi"
       cpu: "4000m"
   extraEnvs:
+    - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
+      value: "My_password_123!@#"
     - name: OPENSEARCH_JAVA_OPTS
       value: "-Xms2g -Xmx2g"
 
@@ -48,7 +50,7 @@ opensearch-dashboards:
 
 # Examples — pulls from GHCR (public images built by .github/workflows/publish-images.yml)
 examples:
-  enabled: true
+  enabled: false
 
 # Prometheus — persistent storage + resource limits
 prometheus:
@@ -66,7 +68,7 @@ prometheus:
 
 # OTel Demo — realistic telemetry from ~20 microservices
 opentelemetry-demo:
-  enabled: true
+  enabled: false
 
 # Gateway not needed — ALB handles ingress directly.
 gateway:
