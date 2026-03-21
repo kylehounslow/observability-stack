@@ -87,7 +87,7 @@ export function osdLoad() {
 
   } else if (action < 0.7) {
     // Direct OpenSearch query through OSD (DSL search)
-    const res = http.post(`${OSD}/api/console/proxy?path=${encodeURIComponent('otel-v1-apm-span-*/_search')}&method=POST`, JSON.stringify({
+    const res = http.post(`${OSD}/api/console/proxy?path=${encodeURIComponent('otel-v1-apm-span-*/_search?preference=_replica')}&method=POST`, JSON.stringify({
       size: 50,
       query: { match_all: {} },
       sort: [{ startTime: 'desc' }],
@@ -104,7 +104,7 @@ export function osdLoad() {
 
   } else {
     // Service map query
-    const res = http.post(`${OSD}/api/console/proxy?path=${encodeURIComponent('otel-v2-apm-service-map-*/_search')}&method=POST`, JSON.stringify({
+    const res = http.post(`${OSD}/api/console/proxy?path=${encodeURIComponent('otel-v2-apm-service-map-*/_search?preference=_replica')}&method=POST`, JSON.stringify({
       size: 200,
       query: { match_all: {} },
     }), { headers });

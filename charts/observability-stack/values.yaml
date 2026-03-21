@@ -25,10 +25,10 @@ opensearch:
   resources:
     requests:
       memory: "4Gi"
-      cpu: "1000m"
+      cpu: "2000m"
     limits:
       memory: "4Gi"
-      cpu: "2000m"
+      cpu: "4000m"
   persistence:
     enabled: true
     size: 8Gi                    # Increase for production (e.g. 100Gi, 500Gi)
@@ -49,7 +49,7 @@ opensearch:
 # -- OpenSearch Dashboards
 opensearch-dashboards:
   enabled: true
-  replicas: 3
+  replicaCount: 3
   image:
     repository: "opensearchstaging/opensearch-dashboards"
     tag: "3.6.0"
@@ -60,6 +60,24 @@ opensearch-dashboards:
     limits:
       cpu: "2000m"
       memory: "2Gi"
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internet-facing
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:027423573553:certificate/489eff8e-d8b5-4ec3-a924-9768f518a49d
+      alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      alb.ingress.kubernetes.io/healthcheck-path: /app/login
+      alb.ingress.kubernetes.io/success-codes: "200"
+      external-dns.alpha.kubernetes.io/hostname: obs-playground-dev-027423573553.kylhouns.people.aws.dev
+    hosts:
+      - host: ""
+        paths:
+          - path: /
+            backend:
+              servicePort: 5601
   opensearchHosts: "https://opensearch-cluster-master:9200"
   config:
     opensearch_dashboards.yml: |
@@ -325,8 +343,15 @@ prometheus:
     # Retention — how long Prometheus keeps metrics. Increase for longer history.
     retention: "15d"
     persistentVolume:
-      enabled: false               # Enable for production (survives pod restarts)
-      # size: 50Gi
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "1000m"
     extraFlags:
       - "web.enable-remote-write-receiver"
       - "web.enable-otlp-receiver"
@@ -450,7 +475,7 @@ examples:
 # All bundled backends (jaeger, grafana, prometheus, opensearch, collector) are disabled —
 # demo services send telemetry to our OTel Collector instead.
 opentelemetry-demo:
-  enabled: false
+  enabled: true
   default:
     envOverrides:
       - name: OTEL_COLLECTOR_NAME
