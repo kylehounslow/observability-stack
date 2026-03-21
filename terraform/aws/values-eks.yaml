@@ -8,10 +8,30 @@
 # gp2 is the default EBS StorageClass on EKS. Without this, OpenSearch PVCs
 # stay Pending because the chart default ("") doesn't match any provisioner.
 opensearch:
+  singleNode: false
+  replicas: 3
   persistence:
     storageClass: gp2
+  resources:
+    requests:
+      memory: "4Gi"
+      cpu: "2000m"
+    limits:
+      memory: "4Gi"
+      cpu: "4000m"
+  extraEnvs:
+    - name: OPENSEARCH_JAVA_OPTS
+      value: "-Xms2g -Xmx2g"
 
 opensearch-dashboards:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"
   ingress:
     enabled: true
     ingressClassName: alb
@@ -28,6 +48,24 @@ opensearch-dashboards:
 
 # Examples — pulls from GHCR (public images built by .github/workflows/publish-images.yml)
 examples:
+  enabled: true
+
+# Prometheus — persistent storage + resource limits
+prometheus:
+  server:
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "1000m"
+
+# OTel Demo — realistic telemetry from ~20 microservices
+opentelemetry-demo:
   enabled: true
 
 # Gateway not needed — ALB handles ingress directly.
