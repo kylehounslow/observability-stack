@@ -14,7 +14,7 @@ PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "My_password_123!@#")
 PROMETHEUS_HOST = os.getenv("PROMETHEUS_HOST", "prometheus")
 PROMETHEUS_PORT = os.getenv("PROMETHEUS_PORT", "9090")
 _opensearch_protocol = os.getenv("OPENSEARCH_PROTOCOL", "https")
-OPENSEARCH_ENDPOINT = f"{_opensearch_protocol}://{os.getenv('OPENSEARCH_HOST', 'opensearch')}:{os.getenv('OPENSEARCH_PORT', '9200')}"
+OPENSEARCH_ENDPOINT = os.getenv("OPENSEARCH_ENDPOINT", f"{_opensearch_protocol}://{os.getenv('OPENSEARCH_HOST', 'opensearch')}:{os.getenv('OPENSEARCH_PORT', '9200')}")
 
 def wait_for_dashboards():
     """Wait for OpenSearch Dashboards to be ready"""
@@ -98,6 +98,43 @@ def create_workspace():
     except requests.exceptions.RequestException as e:
         print(f"⚠️  Error creating workspace: {e}")
         return "default"
+
+
+def set_default_workspace(workspace_id):
+    """Set the default workspace so all users land here on login.
+
+    When workspace.enabled is true, users see a workspace picker on first load.
+    Setting defaultWorkspace directs all users (including anonymous) straight
+    to the Observability Stack workspace instead.
+    """
+    if not workspace_id or workspace_id == "default":
+        print("⏭️  Skipping default workspace (using default)")
+        return False
+
+    print(f"⭐ Setting default workspace: {workspace_id}")
+
+    url = f"{BASE_URL}/api/opensearch-dashboards/settings"
+    payload = {"changes": {"defaultWorkspace": workspace_id}}
+
+    try:
+        response = requests.post(
+            url,
+            auth=(USERNAME, PASSWORD),
+            headers={"Content-Type": "application/json", "osd-xsrf": "true"},
+            json=payload,
+            verify=False,
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            print("✅ Default workspace set")
+            return True
+        else:
+            print(f"⚠️  Failed to set default workspace: {response.status_code} {response.text}")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️  Error setting default workspace: {e}")
+        return False
 
 
 def get_existing_index_pattern(workspace_id, title):
@@ -230,9 +267,13 @@ def create_prometheus_datasource(workspace_id):
 
     prometheus_endpoint = f"http://{PROMETHEUS_HOST}:{PROMETHEUS_PORT}"
 
+    # Grant anonymous users access to the Prometheus datasource when anonymous auth is enabled
+    anonymous_auth = os.getenv("ANONYMOUS_AUTH_ENABLED", "false").lower() == "true"
+    allowed_roles = ["all_access", "opendistro_security_anonymous_role"] if anonymous_auth else ["all_access"]
+
     payload = {
         "name": datasource_name,
-        "allowedRoles": [],
+        "allowedRoles": allowed_roles,
         "connector": "prometheus",
         "properties": {
             "prometheus.uri": prometheus_endpoint,
@@ -1252,6 +1293,9 @@ def main():
         print("✅ Observability Stack workspace already exists")
     else:
         workspace_id = create_workspace()
+
+    # Set as default workspace so users skip the workspace picker
+    set_default_workspace(workspace_id)
 
     # Create index patterns (idempotent - will skip if already exist)
     # Titles must match exactly what the APM plugin expects

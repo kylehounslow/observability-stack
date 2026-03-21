@@ -114,7 +114,10 @@ resource "helm_release" "observability_stack" {
   wait_for_jobs   = true
   cleanup_on_fail = true
 
-  values = [file("${path.module}/values-eks.yaml")]
+  values = concat(
+    [file("${path.module}/values-eks.yaml")],
+    var.anonymous_auth ? [file("${path.module}/../../charts/observability-stack/values-anonymous-auth.yaml")] : []
+  )
 
   # --- TLS / Domain (conditional) ---
   dynamic "set" {
@@ -161,6 +164,12 @@ resource "helm_release" "observability_stack" {
       name  = "opensearch-dashboards.ingress.annotations.alb\\.ingress\\.kubernetes\\.io/wafv2-acl-arn"
       value = aws_wafv2_web_acl.rate_limit[0].arn
     }
+  }
+
+  # --- Examples (conditional) ---
+  set {
+    name  = "examples.enabled"
+    value = var.enable_examples ? "true" : "false"
   }
 
   depends_on = [

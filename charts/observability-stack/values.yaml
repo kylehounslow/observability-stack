@@ -26,15 +26,43 @@ opensearch:
     enabled: true
     size: 8Gi                    # Increase for production (e.g. 100Gi, 500Gi)
     # storageClass: "gp3"       # Uncomment for AWS gp3 (better IOPS/$ than gp2)
+  # JVM heap — set to 50% of resources.requests.memory, max 31g
+  opensearchJavaOpts: "-Xms2g -Xmx2g"
   extraEnvs:
     - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
       value: "My_password_123!@#"
-    # JVM heap — set to 50% of resources.requests.memory, max 31g
-    - name: OPENSEARCH_JAVA_OPTS
-      value: "-Xms2g -Xmx2g"
   config:
     opensearch.yml: |
       plugins.query.datasources.encryption.masterkey: "BTqK4Ytdz67La1kShIKV3Pu9"
+  # Security config — controls anonymous authentication.
+  # Default: anonymous auth disabled. To enable, use values-anonymous-auth.yaml overlay
+  # or set opensearch.securityConfig.config.data."config.yml" with anonymous_auth_enabled: true.
+  securityConfig:
+    config:
+      dataComplete: false
+      data:
+        config.yml: |-
+          _meta:
+            type: "config"
+            config_version: 2
+          config:
+            dynamic:
+              http:
+                anonymous_auth_enabled: false
+                xff:
+                  enabled: false
+                  internalProxies: "192\\.168\\.0\\.10|192\\.168\\.0\\.11"
+              authc:
+                basic_internal_auth_domain:
+                  description: "Authenticate via HTTP Basic against internal users database"
+                  http_enabled: true
+                  transport_enabled: true
+                  order: 4
+                  http_authenticator:
+                    type: "basic"
+                    challenge: true
+                  authentication_backend:
+                    type: "intern"
 
 # -- OpenSearch Dashboards
 opensearch-dashboards:
@@ -114,8 +142,6 @@ data-prepper:
       port: 21891
     - name: otel-logs
       port: 21892
-    - name: metrics
-      port: 4900
   config:
     data-prepper-config.yaml: |
       ssl: false
@@ -429,6 +455,22 @@ prometheus:
 # is duplicated there — update both if you change it.
 opensearchUsername: "admin"
 opensearchPassword: "My_password_123!@#"
+
+# -- Anonymous Authentication
+# When enabled, users can access OpenSearch Dashboards without logging in.
+# Anonymous users can browse data, view/create/modify saved objects, explore
+# traces and service maps, run queries, and access the REST API.
+# They cannot delete existing saved objects or perform admin operations.
+#
+# To enable:
+#   helm install obs-stack . -f values-anonymous-auth.yaml
+#
+# Or override individual values:
+#   --set anonymousAuth.enabled=true
+#   (plus the opensearch.securityConfig and opensearch-dashboards.config overrides
+#    shown in values-anonymous-auth.yaml)
+anonymousAuth:
+  enabled: false
 
 # -- OpenSearch Prometheus Exporter
 opensearchExporter:

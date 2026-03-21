@@ -19,11 +19,10 @@ opensearch:
     limits:
       memory: "4Gi"
       cpu: "4000m"
+  opensearchJavaOpts: "-Xms2g -Xmx2g"
   extraEnvs:
     - name: OPENSEARCH_INITIAL_ADMIN_PASSWORD
       value: "My_password_123!@#"
-    - name: OPENSEARCH_JAVA_OPTS
-      value: "-Xms2g -Xmx2g"
 
 opensearch-dashboards:
   replicaCount: 3
@@ -58,6 +57,7 @@ prometheus:
     persistentVolume:
       enabled: true
       size: 50Gi
+      storageClass: gp2
     resources:
       requests:
         memory: "2Gi"
