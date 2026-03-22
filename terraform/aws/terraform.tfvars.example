@@ -11,3 +11,7 @@
 # enable_waf         = false
 # anonymous_auth     = false
 # enable_examples    = false
+
+# Credentials — prefer env var over tfvars to avoid committing secrets:
+#   export TF_VAR_opensearch_password="YourSecurePassword123!"
+# opensearch_password = "..."

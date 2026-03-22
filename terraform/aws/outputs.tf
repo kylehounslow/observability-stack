@@ -9,7 +9,14 @@ output "dashboards_url" {
 
 output "credentials" {
   description = "OpenSearch Dashboards login"
-  value       = "Username: admin | Password: My_password_123!@#"
+  value       = "Username: admin | Password: (set via TF_VAR_opensearch_password)"
+  sensitive   = false
+}
+
+output "opensearch_password" {
+  description = "OpenSearch admin password"
+  value       = var.opensearch_password
+  sensitive   = true
 }
 
 output "kubeconfig_command" {

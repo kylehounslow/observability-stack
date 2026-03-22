@@ -53,6 +53,13 @@ variable "route53_zone_id" {
 # Security — off by default for initial smoke test
 # ============================================================================
 
+variable "opensearch_password" {
+  description = "OpenSearch admin password. Set via TF_VAR_opensearch_password env var — do not commit."
+  type        = string
+  sensitive   = true
+  default     = "My_password_123!@#"
+}
+
 variable "enable_waf" {
   description = "Enable WAF rate limiting on the ALB (2000 req/5min/IP)"
   type        = bool

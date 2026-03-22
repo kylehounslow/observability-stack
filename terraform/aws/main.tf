@@ -13,6 +13,30 @@
 
 terraform {
   required_version = ">= 1.5"
+
+  # ========================================================================
+  # Remote state — uncomment after creating the S3 bucket and DynamoDB table.
+  #
+  # Bootstrap (run once):
+  #   aws s3api create-bucket --bucket <your-org>-obs-stack-tfstate \
+  #     --region us-west-2 --create-bucket-configuration LocationConstraint=us-west-2
+  #   aws s3api put-bucket-versioning --bucket <your-org>-obs-stack-tfstate \
+  #     --versioning-configuration Status=Enabled
+  #   aws dynamodb create-table --table-name obs-stack-tf-locks \
+  #     --attribute-definitions AttributeName=LockID,AttributeType=S \
+  #     --key-schema AttributeName=LockID,KeyType=HASH \
+  #     --billing-mode PAY_PER_REQUEST --region us-west-2
+  #
+  # Then uncomment below, update the bucket name, and run `terraform init`.
+  # ========================================================================
+  # backend "s3" {
+  #   bucket         = "<your-org>-obs-stack-tfstate"
+  #   key            = "observability-stack/terraform.tfstate"
+  #   region         = "us-west-2"
+  #   dynamodb_table = "obs-stack-tf-locks"
+  #   encrypt        = true
+  # }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"

@@ -20,6 +20,10 @@ Deploy the full observability stack to EKS in one command. Start with plain HTTP
 ```bash
 cd terraform/aws
 terraform init
+
+# Optional: set a custom password (default: My_password_123!@#)
+export TF_VAR_opensearch_password="YourSecurePassword123!"
+
 terraform apply
 ```
 
@@ -106,4 +110,25 @@ terraform destroy
 | `route53_zone_id` | `""` (disabled) | Route53 zone — required with domain |
 | `enable_waf` | `false` | WAF rate limiting |
 | `anonymous_auth` | `false` | Public read-only access |
+| `opensearch_password` | `My_password_123!@#` | OpenSearch admin password (use `TF_VAR_opensearch_password` env var) |
 | `enable_examples` | `false` | Example agent services |
+
+## Remote State
+
+By default, Terraform stores state locally. For team use, uncomment the S3 backend in `main.tf` and create the required resources:
+
+```bash
+# Create state bucket (once)
+aws s3api create-bucket --bucket <your-org>-obs-stack-tfstate \
+  --region us-west-2 --create-bucket-configuration LocationConstraint=us-west-2
+aws s3api put-bucket-versioning --bucket <your-org>-obs-stack-tfstate \
+  --versioning-configuration Status=Enabled
+
+# Create lock table (once)
+aws dynamodb create-table --table-name obs-stack-tf-locks \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST --region us-west-2
+```
+
+Then uncomment the `backend "s3"` block in `main.tf`, update the bucket name, and run `terraform init`.

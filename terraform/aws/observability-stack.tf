@@ -116,6 +116,16 @@ resource "helm_release" "observability_stack" {
 
   values = [file("${path.module}/values-eks.yaml")]
 
+  # --- Credentials (from variable — set via TF_VAR_opensearch_password) ---
+  set_sensitive {
+    name  = "opensearchPassword"
+    value = var.opensearch_password
+  }
+  set_sensitive {
+    name  = "opensearch.extraEnvs[0].value"
+    value = var.opensearch_password
+  }
+
   # --- TLS / Domain (conditional) ---
   dynamic "set" {
     for_each = local.enable_tls ? [1] : []
