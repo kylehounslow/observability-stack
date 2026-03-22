@@ -98,7 +98,7 @@ resource "aws_wafv2_web_acl" "rate_limit" {
 
 resource "kubernetes_namespace" "observability" {
   metadata {
-    name = "observability-stack"
+    name = "obs-stack"
   }
 
   depends_on = [module.eks]

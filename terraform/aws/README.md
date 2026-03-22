@@ -34,7 +34,7 @@ That's it. No config file needed. When complete (~15 min):
 eval $(terraform output -raw kubeconfig_command)
 
 # Get the ALB URL
-kubectl get ingress -n observability-stack
+kubectl get ingress -n obs-stack
 
 # Get the password
 terraform output -raw opensearch_password
@@ -76,7 +76,7 @@ Adds a WAFv2 WebACL: 2000 requests per 5 minutes per IP, 429 response when excee
 ## Send Telemetry
 
 ```bash
-kubectl port-forward -n observability-stack svc/obs-stack-opentelemetry-collector 4317:4317 4318:4318 &
+kubectl port-forward -n obs-stack svc/obs-stack-opentelemetry-collector 4317:4317 4318:4318 &
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:4317"
 ```
 
@@ -86,7 +86,7 @@ To deploy the [OTel Demo](https://opentelemetry.io/docs/demo/) microservices app
 
 ```bash
 cd terraform/aws
-helm upgrade obs-stack ../../charts/observability-stack -n observability-stack -f values-eks.yaml \
+helm upgrade obs-stack ../../charts/observability-stack -n obs-stack -f values-eks.yaml \
   --set opentelemetry-demo.enabled=true --no-hooks
 ```
 

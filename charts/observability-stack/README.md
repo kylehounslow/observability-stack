@@ -22,12 +22,12 @@ Additional templates (not subcharts):
 ```bash
 cd charts/observability-stack
 helm dependency build
-helm install obs-stack . -n observability-stack --create-namespace
+helm install obs-stack . -n obs-stack --create-namespace
 ```
 
 For EKS with ALB ingress, use the values override:
 ```bash
-helm install obs-stack . -n observability-stack --create-namespace -f ../../terraform/aws/values-eks.yaml
+helm install obs-stack . -n obs-stack --create-namespace -f ../../terraform/aws/values-eks.yaml
 ```
 
 Or use Terraform (recommended) — see `terraform/aws/README.md`.
@@ -39,18 +39,18 @@ The init job (dashboard/index pattern setup) runs as a post-install/post-upgrade
 **Recommended upgrade workflow:**
 ```bash
 # 1. Deploy chart changes (skip hooks to avoid timeout)
-helm upgrade obs-stack . -n observability-stack -f ../../terraform/aws/values-eks.yaml --no-hooks
+helm upgrade obs-stack . -n obs-stack -f ../../terraform/aws/values-eks.yaml --no-hooks
 
 # 2. If dashboard or init script changed, trigger the job manually:
-kubectl delete job obs-stack-observability-stack-init-dashboards -n observability-stack 2>/dev/null
-helm get hooks obs-stack -n observability-stack | kubectl apply -n observability-stack -f -
-kubectl wait --for=condition=complete job/obs-stack-observability-stack-init-dashboards -n observability-stack --timeout=10m
-kubectl logs -n observability-stack job/obs-stack-observability-stack-init-dashboards --tail=30
+kubectl delete job obs-stack-observability-stack-init-dashboards -n obs-stack 2>/dev/null
+helm get hooks obs-stack -n obs-stack | kubectl apply -n obs-stack -f -
+kubectl wait --for=condition=complete job/obs-stack-observability-stack-init-dashboards -n obs-stack --timeout=10m
+kubectl logs -n obs-stack job/obs-stack-observability-stack-init-dashboards --tail=30
 ```
 
 If only `values.yaml` scrape configs changed (no dashboard changes), step 2 is not needed — but you may need to restart Prometheus to pick up the new configmap:
 ```bash
-kubectl rollout restart deployment obs-stack-prometheus-server -n observability-stack
+kubectl rollout restart deployment obs-stack-prometheus-server -n obs-stack
 ```
 
 ## Self-Monitoring Dashboards
@@ -215,13 +215,13 @@ Disabled by default (~2GB additional memory required).
 
 **Enable:**
 ```bash
-helm upgrade obs-stack . -n observability-stack -f ../../terraform/aws/values-eks.yaml \
+helm upgrade obs-stack . -n obs-stack -f ../../terraform/aws/values-eks.yaml \
   --set opentelemetry-demo.enabled=true --no-hooks
 ```
 
 **Disable:**
 ```bash
-helm upgrade obs-stack . -n observability-stack -f ../../terraform/aws/values-eks.yaml --no-hooks
+helm upgrade obs-stack . -n obs-stack -f ../../terraform/aws/values-eks.yaml --no-hooks
 ```
 
 All bundled backends (Jaeger, Grafana, Prometheus, OpenSearch) in the demo chart are disabled — demo services send telemetry to our OTel Collector. No duplicate infrastructure.

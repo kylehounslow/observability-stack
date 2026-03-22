@@ -4,7 +4,7 @@
 
 output "dashboards_url" {
   description = "OpenSearch Dashboards URL"
-  value       = local.enable_tls ? "https://${var.domain}" : "http://<ALB_DNS> — run: kubectl get ingress -n observability-stack"
+  value       = local.enable_tls ? "https://${var.domain}" : "http://<ALB_DNS> — run: kubectl get ingress -n obs-stack"
 }
 
 output "credentials" {
@@ -31,7 +31,7 @@ output "cluster_name" {
 
 output "otlp_endpoint" {
   description = "OTLP endpoint (port-forward required)"
-  value       = "kubectl port-forward -n observability-stack svc/obs-stack-opentelemetry-collector 4317:4317 4318:4318"
+  value       = "kubectl port-forward -n obs-stack svc/obs-stack-opentelemetry-collector 4317:4317 4318:4318"
 }
 
 output "next_steps" {
