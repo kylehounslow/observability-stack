@@ -142,6 +142,8 @@ data-prepper:
       port: 21891
     - name: otel-logs
       port: 21892
+    - name: metrics
+      port: 4900
   config:
     data-prepper-config.yaml: |
       ssl: false
