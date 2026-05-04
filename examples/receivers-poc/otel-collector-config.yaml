@@ -1,0 +1,106 @@
+# otel-collector-config.yaml
+#
+# POC collector config for examples/receivers-poc/. This is a full collector
+# config (not a fragment). It starts from the same shape as
+# docker-compose/otel-collector/config.yaml and layers in additional receivers
+# behind comment guards — uncomment per-receiver as you enable them in the
+# compose override.
+#
+# SCOPE: scaffolding only. Each receiver below is commented out; enable and
+# iterate as the corresponding subfolder README is worked through.
+
+receivers:
+  # OTLP receiver accepts logs, traces, and metrics via OpenTelemetry Protocol.
+  # Unchanged from the default config.
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # --- Datadog trace-agent compatibility ---
+  # datadog:
+  #   endpoint: 0.0.0.0:8126
+  #   read_timeout: 60s
+  #   trace_id_cache_size: 100
+
+  # --- DogStatsD / statsd metrics ---
+  # statsd:
+  #   endpoint: 0.0.0.0:8125
+  #   aggregation_interval: 60s
+  #   enable_metric_type: true
+  #   is_monotonic_counter: false
+
+  # --- AWS X-Ray (UDP) ---
+  # awsxray:
+  #   endpoint: 0.0.0.0:2000
+  #   transport: udp
+
+  # --- AWS Kinesis Data Firehose HTTP endpoint ---
+  # awsfirehose:
+  #   endpoint: 0.0.0.0:4433
+  #   record_type: cwlogs           # one of: cwmetrics, cwlogs, otlp_v1
+  #   # access_key: "<optional shared secret Firehose sends in x-amz-firehose-access-key>"
+
+  # --- Prometheus remote_write ---
+  # prometheusremotewrite:
+  #   endpoint: 0.0.0.0:19291
+
+processors:
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 2s
+    override: false
+
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(status.code, STATUS_CODE_ERROR) where attributes["http.response.status_code"] != nil and attributes["http.response.status_code"] >= 500
+
+  batch:
+    timeout: 1s
+    send_batch_size: 1024
+
+exporters:
+  # Traces / logs → OpenSearch via the existing otlp exporter wired to Data Prepper.
+  otlp/opensearch:
+    endpoint: data-prepper:21890
+    tls:
+      insecure: true
+
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      # Enable additional trace receivers here as you bring them online:
+      # receivers: [otlp, datadog, awsxray]
+      receivers: [otlp]
+      processors: [resourcedetection, memory_limiter, transform, batch]
+      exporters: [otlp/opensearch, debug]
+
+    metrics:
+      # Enable additional metric receivers here:
+      # receivers: [otlp, statsd, prometheusremotewrite]
+      receivers: [otlp]
+      processors: [resourcedetection, memory_limiter, batch]
+      exporters: [otlphttp/prometheus, debug]
+
+    logs:
+      # Enable additional log receivers here:
+      # receivers: [otlp, awsfirehose]
+      receivers: [otlp]
+      processors: [resourcedetection, memory_limiter, transform, batch]
+      exporters: [otlp/opensearch, debug]

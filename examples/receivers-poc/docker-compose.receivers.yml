@@ -1,0 +1,41 @@
+# docker-compose.receivers.yml
+#
+# Compose override for the receivers POC. Adds ports to the otel-collector
+# service so receiver endpoints are reachable from the host / sibling containers.
+#
+# Ports stay exposed even if the receiver stanza in otel-collector-config.yaml
+# is still commented out — there's no harm in a published port with nothing
+# listening. Uncomment a receiver's port below as you enable it.
+#
+# Usage (from repo root):
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f examples/receivers-poc/docker-compose.receivers.yml \
+#     up -d
+#
+# When ready to swap in the POC collector config, also mount the override
+# config file (see the commented volume block below).
+
+services:
+  otel-collector:
+    # Uncomment to layer the POC collector config on top of the default one.
+    # The POC config expects to be merged/applied instead of the default —
+    # not stacked. Simplest is to swap the bind-mount target.
+    #
+    # volumes:
+    #   - ./examples/receivers-poc/otel-collector-config.yaml:/etc/otelcol-config.yml
+    ports:
+      # --- Datadog trace-agent (datadogreceiver) ---
+      # - "8126:8126"
+      #
+      # --- DogStatsD (statsdreceiver) ---
+      # - "8125:8125/udp"
+      #
+      # --- AWS X-Ray daemon protocol (awsxrayreceiver) ---
+      # - "2000:2000/udp"
+      #
+      # --- AWS Firehose HTTP endpoint (awsfirehosereceiver) ---
+      # - "4433:4433"
+      #
+      # --- Prometheus remote_write (prometheusremotewritereceiver) ---
+      # - "19291:19291"
