@@ -50,13 +50,16 @@ exporters:
     ingest_url: "${SPLUNK_INGEST_URL}"
     sync_host_metadata: true
 
-  # Splunk Log Observer via HEC. Returns 404 in current POC validation; see README caveats.
+  # Splunk Cloud Platform (logs via HEC).
   splunk_hec:
     token: "${SPLUNK_HEC_TOKEN}"
     endpoint: "${SPLUNK_HEC_URL}"
     source: "otel-demo"
     sourcetype: "otel"
+    index: "${SPLUNK_HEC_INDEX}"
     profiling_data_enabled: false
+    tls:
+      insecure_skip_verify: true
 
   # Forward to observability-stack's base otel-collector for the OpenSearch path.
   otlp/tee:
