@@ -212,6 +212,14 @@ data-prepper:
     enabled: false
     existingSecret: data-prepper-pipeline
 
+# -- Data Prepper otel_traces processor: trace_flush_interval (seconds).
+# How long the processor buffers spans before computing traceGroup and
+# emitting completed traces. Default 180s matches upstream. Lower at the
+# cost of marking late-arriving traces incomplete; raise at the cost of
+# DP heap usage. See trace_duration_distribution.md for OpenRCA-bench
+# sizing math.
+dataPrepperTraceFlushInterval: 180
+
 # -- OpenTelemetry Collector
 opentelemetry-collector:
   enabled: true
