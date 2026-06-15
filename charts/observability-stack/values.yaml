@@ -181,8 +181,10 @@ data-prepper:
       port: 21891
     - name: otel-logs
       port: 21892
-    - name: metrics
-      port: 4900
+    # NOTE: data-prepper subchart already declares port 4900 as `server`
+    # (admin/metrics endpoint). Adding a duplicate `metrics` entry here
+    # causes K8s SSA to reject the Deployment with a containerPort
+    # conflict. Use the subchart's `server` port for /metrics/prometheus.
   config:
     data-prepper-config.yaml: |
       ssl: false
