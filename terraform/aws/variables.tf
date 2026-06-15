@@ -145,6 +145,30 @@ variable "cortex_storage_class" {
 }
 
 # ============================================================================
+# Data Prepper sizing — bump for sustained high-throughput trace ingest. The
+# default 180s trace_flush_interval buffers all in-flight spans for traceGroup
+# inference; at ~30K spans/sec sustained that's ~5M spans (~10 GB heap) at peak.
+# ============================================================================
+
+variable "data_prepper_memory" {
+  description = "Data Prepper container memory request/limit. Defaults to 1Gi (subchart default). Bump to 4Gi+ for sustained ingest workloads."
+  type        = string
+  default     = "1Gi"
+}
+
+variable "data_prepper_jvm_heap" {
+  description = "Data Prepper JVM heap size. Should be ~75% of data_prepper_memory. Use the G/g suffix Java expects (e.g. '512m', '2g', '8g'). Empty string disables JAVA_OPTS override."
+  type        = string
+  default     = ""
+}
+
+variable "data_prepper_trace_flush_interval" {
+  description = "Seconds the otel_traces processor buffers spans before computing traceGroup. Default 180s buffers ~5M spans at 30K/sec; lower to ~90 for ingest-time-bounded workloads at the cost of marking late-arriving traces incomplete."
+  type        = number
+  default     = 180
+}
+
+# ============================================================================
 # Derived
 # ============================================================================
 

@@ -228,6 +228,38 @@ resource "helm_release" "observability_stack" {
     value = var.cortex_storage_class
   }
 
+  # --- Data Prepper sizing ---
+  set {
+    name  = "data-prepper.resources.requests.memory"
+    value = var.data_prepper_memory
+  }
+  set {
+    name  = "data-prepper.resources.limits.memory"
+    value = var.data_prepper_memory
+  }
+  # JAVA_OPTS via the subchart's extraEnvs[]. Only emit when an override is
+  # given; otherwise the JVM picks heap from MaxRAMPercentage defaults.
+  dynamic "set" {
+    for_each = var.data_prepper_jvm_heap == "" ? [] : [1]
+    content {
+      name  = "data-prepper.extraEnvs[0].name"
+      value = "JAVA_OPTS"
+    }
+  }
+  dynamic "set" {
+    for_each = var.data_prepper_jvm_heap == "" ? [] : [1]
+    content {
+      name  = "data-prepper.extraEnvs[0].value"
+      value = "-Xms${var.data_prepper_jvm_heap} -Xmx${var.data_prepper_jvm_heap}"
+    }
+  }
+  # The pipeline secret template reads .Values.dataPrepperTraceFlushInterval
+  # to parameterize the otel_traces processor flush window.
+  set {
+    name  = "dataPrepperTraceFlushInterval"
+    value = var.data_prepper_trace_flush_interval
+  }
+
   depends_on = [
     helm_release.aws_lb_controller,
   ]
