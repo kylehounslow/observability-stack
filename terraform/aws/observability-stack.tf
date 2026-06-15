@@ -192,6 +192,42 @@ resource "helm_release" "observability_stack" {
     }
   }
 
+  # --- OpenSearch sizing ---
+  set {
+    name  = "opensearch.replicas"
+    value = var.opensearch_replicas
+  }
+  set {
+    name  = "opensearch.persistence.size"
+    value = var.opensearch_storage_size
+  }
+  set {
+    name  = "opensearch.persistence.storageClass"
+    value = var.opensearch_storage_class
+  }
+  set {
+    name  = "opensearch.resources.requests.memory"
+    value = var.opensearch_node_memory
+  }
+  set {
+    name  = "opensearch.resources.limits.memory"
+    value = var.opensearch_node_memory
+  }
+  set {
+    name  = "opensearch.opensearchJavaOpts"
+    value = "-Xms${var.opensearch_jvm_heap} -Xmx${var.opensearch_jvm_heap}"
+  }
+
+  # --- Cortex sizing ---
+  set {
+    name  = "cortex.persistence.size"
+    value = var.cortex_storage_size
+  }
+  set {
+    name  = "cortex.persistence.storageClass"
+    value = var.cortex_storage_class
+  }
+
   depends_on = [
     helm_release.aws_lb_controller,
   ]

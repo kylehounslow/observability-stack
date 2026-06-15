@@ -94,6 +94,57 @@ variable "tags" {
 }
 
 # ============================================================================
+# OpenSearch sizing — bump up for high-volume ingest workloads (e.g. RCA
+# benchmark dataset at ~290 GB raw NDJSON / ~1 TB indexed with 1 replica)
+# ============================================================================
+
+variable "opensearch_replicas" {
+  description = "Number of OpenSearch nodes (StatefulSet replicas). 3 is the production minimum."
+  type        = number
+  default     = 3
+}
+
+variable "opensearch_storage_size" {
+  description = "Per-node OpenSearch PVC size, e.g. 100Gi for default, 500Gi for large-ingest workloads. Total cluster storage = opensearch_replicas × this value."
+  type        = string
+  default     = "100Gi"
+}
+
+variable "opensearch_storage_class" {
+  description = "EBS storage class for OpenSearch PVCs. gp3 is cheaper and gives provisioned-IOPS knobs vs gp2; both are valid."
+  type        = string
+  default     = "gp2"
+}
+
+variable "opensearch_node_memory" {
+  description = "Per-node OpenSearch container memory request/limit (e.g. 4Gi default, 16Gi for high-volume). The chart sets requests=limits, so set to whatever the node should reserve."
+  type        = string
+  default     = "4Gi"
+}
+
+variable "opensearch_jvm_heap" {
+  description = "OpenSearch JVM heap size. Should be ~50% of opensearch_node_memory, max 31g. Use the matching G/g suffix the chart expects (e.g. '2g', '8g', '16g')."
+  type        = string
+  default     = "2g"
+}
+
+# ============================================================================
+# Cortex sizing — usually small, but exposing for parity
+# ============================================================================
+
+variable "cortex_storage_size" {
+  description = "Cortex PVC size. 50Gi handles a year of OTLP-demo traffic; bump for higher cardinality fleets."
+  type        = string
+  default     = "50Gi"
+}
+
+variable "cortex_storage_class" {
+  description = "EBS storage class for Cortex PVC."
+  type        = string
+  default     = "gp2"
+}
+
+# ============================================================================
 # Derived
 # ============================================================================
 
