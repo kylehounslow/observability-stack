@@ -181,10 +181,11 @@ data-prepper:
       port: 21891
     - name: otel-logs
       port: 21892
-    # NOTE: data-prepper subchart already declares port 4900 as `server`
-    # (admin/metrics endpoint). Adding a duplicate `metrics` entry here
-    # causes K8s SSA to reject the Deployment with a containerPort
-    # conflict. Use the subchart's `server` port for /metrics/prometheus.
+    # Port 4900 (the subchart's hardcoded `server` containerPort, serving
+    # /metrics/prometheus) is intentionally NOT listed here: adding it would
+    # duplicate the containerPort and the API server rejects the Deployment.
+    # It is published instead by a separate metrics Service — see
+    # templates/data-prepper-metrics-service.yaml and dataPrepperMetricsService.
   config:
     data-prepper-config.yaml: |
       ssl: false
@@ -219,6 +220,15 @@ data-prepper:
 # DP heap usage. See trace_duration_distribution.md for OpenRCA-bench
 # sizing math.
 dataPrepperTraceFlushInterval: 180
+
+# -- Data Prepper metrics Service. Publishes the admin/metrics port (4900,
+# /metrics/prometheus) on a dedicated ClusterIP Service so Prometheus /
+# the collector can scrape Data Prepper's pipeline metrics. The subchart
+# only puts 4900 on the pod, not on its Service, so without this the
+# pipeline-health dashboard's Data Prepper panels stay empty.
+dataPrepperMetricsService:
+  enabled: true
+  port: 4900
 
 # -- OpenTelemetry Collector
 opentelemetry-collector:

@@ -1,0 +1,35 @@
+{{- if .Values.dataPrepperMetricsService.enabled }}
+{{- /*
+Data Prepper exposes its Micrometer Prometheus metrics on the admin
+server port (default 4900) at /metrics/prometheus and /metrics/sys. The
+data-prepper subchart hardcodes that port as the pod containerPort
+`server` but renders the Service only from `.Values.ports`, so 4900 is
+never published on the main Service — the collector's scrape of
+data-prepper:4900 is refused and the pipeline-health dashboard's Data
+Prepper panels stay empty.
+
+Adding 4900 to the subchart's `.Values.ports` would duplicate the
+containerPort (the subchart already declares `server`) and the API
+server rejects the Deployment. A separate Service avoids that: it
+targets the existing `server` containerPort by name, so no pod change.
+*/ -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-data-prepper-metrics
+  labels:
+    {{- /* Match the subchart's selector so this Service routes to DP pods. */}}
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: metrics
+spec:
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: {{ .Values.dataPrepperMetricsService.port }}
+      targetPort: server
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: data-prepper
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
