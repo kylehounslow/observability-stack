@@ -41,15 +41,57 @@ otel-logs-pipeline:
         entries:
           - from_key: "time"
             to_key: "@timestamp"
+    # DP route's JsonPointer parser treats dots as nesting separators,
+    # so `/resource/attributes/openrca.dataset` looks up resource →
+    # attributes → openrca → dataset (which doesn't exist) instead of
+    # the literal-dot leaf key. Surface the dotted keys as flat
+    # top-level fields the route can address unambiguously.
+    - add_entries:
+        entries:
+          - key: openrca_dataset
+            value_expression: '/resource/attributes/openrca.dataset'
+            overwrite_if_key_exists: true
+          - key: openrca_cloudbed
+            value_expression: '/resource/attributes/openrca.cloudbed'
+            overwrite_if_key_exists: true
+  route:
+    - openrca_bank: '/openrca_dataset == "bank"'
+    # Market splits by cloudbed; the converter emits dataset="market"
+    # + cloudbed="cb1"|"cb2" as separate resource attributes.
+    - openrca_market_cb1: '/openrca_dataset == "market" and /openrca_cloudbed == "cb1"'
+    - openrca_market_cb2: '/openrca_dataset == "market" and /openrca_cloudbed == "cb2"'
   # Write processed logs to OpenSearch
   sink:
     - opensearch:
         hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
         username: OPENSEARCH_USER
         password: OPENSEARCH_PASSWORD
-        # Disable SSL verification for development
         insecure: true
-        # Use log analytics index type for automatic index management
+        index_type: management_disabled
+        index: "eval-otel-v1-logs-openrca-bank"
+        routes: [openrca_bank]
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
+        index_type: management_disabled
+        index: "eval-otel-v1-logs-openrca-market-cb1"
+        routes: [openrca_market_cb1]
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
+        index_type: management_disabled
+        index: "eval-otel-v1-logs-openrca-market-cb2"
+        routes: [openrca_market_cb2]
+    # Catch-all for non-OpenRCA traffic.
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
         index_type: log-analytics-plain
 
 # Trace processing pipeline
@@ -75,13 +117,64 @@ traces-raw-pipeline:
   processor:
     # Process raw trace data for OpenSearch storage
     - otel_traces:
+    # DP route's JsonPointer parser treats dots as nesting separators,
+    # so `/resource/attributes/openrca.dataset` looks up resource →
+    # attributes → openrca → dataset (which doesn't exist) instead of
+    # the literal-dot leaf key. Surface the dotted keys as flat
+    # top-level fields the route can address unambiguously.
+    - add_entries:
+        entries:
+          - key: openrca_dataset
+            value_expression: '/resource/attributes/openrca.dataset'
+            overwrite_if_key_exists: true
+          - key: openrca_cloudbed
+            value_expression: '/resource/attributes/openrca.cloudbed'
+            overwrite_if_key_exists: true
+  route:
+    - openrca_telecom: '/openrca_dataset == "telecom"'
+    - openrca_bank: '/openrca_dataset == "bank"'
+    # Market splits by cloudbed.
+    - openrca_market_cb1: '/openrca_dataset == "market" and /openrca_cloudbed == "cb1"'
+    - openrca_market_cb2: '/openrca_dataset == "market" and /openrca_cloudbed == "cb2"'
   sink:
     - opensearch:
         hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
         username: OPENSEARCH_USER
         password: OPENSEARCH_PASSWORD
         insecure: true
-        # Use trace analytics index type for automatic index management
+        index_type: management_disabled
+        index: "eval-otel-v1-apm-span-openrca-telecom"
+        routes: [openrca_telecom]
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
+        index_type: management_disabled
+        index: "eval-otel-v1-apm-span-openrca-bank"
+        routes: [openrca_bank]
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
+        index_type: management_disabled
+        index: "eval-otel-v1-apm-span-openrca-market-cb1"
+        routes: [openrca_market_cb1]
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
+        index_type: management_disabled
+        index: "eval-otel-v1-apm-span-openrca-market-cb2"
+        routes: [openrca_market_cb2]
+    # Catch-all for non-OpenRCA traffic (live demo, ad-hoc OTLP).
+    - opensearch:
+        hosts: ["OPENSEARCH_PROTOCOL://OPENSEARCH_HOST:OPENSEARCH_PORT"]
+        username: OPENSEARCH_USER
+        password: OPENSEARCH_PASSWORD
+        insecure: true
         index_type: trace-analytics-plain-raw
 
 # Service map generation pipeline (APM)

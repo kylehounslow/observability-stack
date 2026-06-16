@@ -8,15 +8,15 @@ import yaml
 _dashboards_host = os.getenv("OPENSEARCH_DASHBOARDS_HOST", "opensearch-dashboards")
 _dashboards_port = os.getenv("OPENSEARCH_DASHBOARDS_PORT", "5601")
 _dashboards_protocol = os.getenv("OPENSEARCH_DASHBOARDS_PROTOCOL", "http")
-BASE_URL = f"{_dashboards_protocol}://{_dashboards_host}:{_dashboards_port}"
+BASE_URL = os.getenv("BASE_URL", f"{_dashboards_protocol}://{_dashboards_host}:{_dashboards_port}")
 USERNAME = os.getenv("OPENSEARCH_USER", "admin")
 PASSWORD = os.getenv("OPENSEARCH_PASSWORD", "My_password_123!@#")
-PROMETHEUS_HOST = os.getenv("PROMETHEUS_HOST", "prometheus.observability-stack-network")
+PROMETHEUS_HOST = os.getenv("PROMETHEUS_HOST", "prometheus")
 PROMETHEUS_PORT = os.getenv("PROMETHEUS_PORT", "9090")
 ALERTMANAGER_HOST = os.getenv("ALERTMANAGER_HOST", "alertmanager")
 ALERTMANAGER_PORT = os.getenv("ALERTMANAGER_PORT", "9093")
 _opensearch_protocol = os.getenv("OPENSEARCH_PROTOCOL", "https")
-OPENSEARCH_ENDPOINT = f"{_opensearch_protocol}://{os.getenv('OPENSEARCH_HOST', 'opensearch')}:{os.getenv('OPENSEARCH_PORT', '9200')}"
+OPENSEARCH_ENDPOINT = os.getenv("OPENSEARCH_ENDPOINT", f"{_opensearch_protocol}://{os.getenv('OPENSEARCH_HOST', 'opensearch')}:{os.getenv('OPENSEARCH_PORT', '9200')}")
 ISM_RETENTION_DAYS = int(os.getenv("ISM_RETENTION_DAYS", "7"))
 
 
@@ -177,6 +177,43 @@ def create_workspace():
     except requests.exceptions.RequestException as e:
         print(f"⚠️  Error creating workspace: {e}")
         return "default"
+
+
+def set_default_workspace(workspace_id):
+    """Set the default workspace so all users land here on login.
+
+    When workspace.enabled is true, users see a workspace picker on first load.
+    Setting defaultWorkspace directs all users (including anonymous) straight
+    to the Observability Stack workspace instead.
+    """
+    if not workspace_id or workspace_id == "default":
+        print("⏭️  Skipping default workspace (using default)")
+        return False
+
+    print(f"⭐ Setting default workspace: {workspace_id}")
+
+    url = f"{BASE_URL}/api/opensearch-dashboards/settings"
+    payload = {"changes": {"defaultWorkspace": workspace_id}}
+
+    try:
+        response = requests.post(
+            url,
+            auth=(USERNAME, PASSWORD),
+            headers={"Content-Type": "application/json", "osd-xsrf": "true"},
+            json=payload,
+            verify=False,
+            timeout=10,
+        )
+
+        if response.status_code == 200:
+            print("✅ Default workspace set")
+            return True
+        else:
+            print(f"⚠️  Failed to set default workspace: {response.status_code} {response.text}")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"⚠️  Error setting default workspace: {e}")
+        return False
 
 
 def get_existing_index_pattern(workspace_id, title):
@@ -342,25 +379,59 @@ def create_prometheus_datasource(workspace_id):
     # Check if datasource already exists
     existing_id = get_existing_prometheus_datasource(datasource_name)
     if existing_id:
-        print(f"✅ Prometheus datasource already exists: {existing_id}")
-        reconciled = reconcile_prometheus_datasource_properties(
-            datasource_name, desired_properties
-        )
-        # Reconciliation goes through DELETE + POST, so the saved-object
-        # id may have changed — re-read before associating.
-        datasource_id = existing_id
-        if reconciled:
-            datasource_id = get_existing_prometheus_datasource(datasource_name) or existing_id
-        # Associate with workspace if provided
-        if workspace_id and workspace_id != "default":
-            associate_prometheus_with_workspace(workspace_id, datasource_id)
-        return datasource_id
+        # Verify the datasource is functional (masterkey can decrypt it).
+        # On helm upgrades the plugins.query.datasources.encryption.masterkey
+        # may differ from the key used to encrypt the stored secret; the
+        # SQL plugin then surfaces a decryption error on every query. Detect
+        # and wipe so the fresh POST below re-creates it with the current key.
+        broken = False
+        try:
+            verify = requests.get(
+                f"{OPENSEARCH_ENDPOINT}/_plugins/_query/_datasources/{datasource_name}",
+                auth=(USERNAME, PASSWORD),
+                headers={"Content-Type": "application/json"},
+                verify=False,
+                timeout=10,
+            )
+            if verify.status_code == 200 and "error" not in verify.json():
+                pass
+            else:
+                print(f"⚠️  Prometheus datasource exists but is broken (encryption key mismatch). Deleting to recreate...")
+                requests.delete(
+                    f"{OPENSEARCH_ENDPOINT}/_plugins/_query/_datasources/{datasource_name}",
+                    auth=(USERNAME, PASSWORD),
+                    headers={"Content-Type": "application/json"},
+                    verify=False,
+                    timeout=10,
+                )
+                broken = True
+        except requests.exceptions.RequestException:
+            pass
+
+        if not broken:
+            print(f"✅ Prometheus datasource already exists: {existing_id}")
+            reconciled = reconcile_prometheus_datasource_properties(
+                datasource_name, desired_properties
+            )
+            # Reconciliation goes through DELETE + POST, so the saved-object
+            # id may have changed — re-read before associating.
+            datasource_id = existing_id
+            if reconciled:
+                datasource_id = get_existing_prometheus_datasource(datasource_name) or existing_id
+            # Associate with workspace if provided
+            if workspace_id and workspace_id != "default":
+                associate_prometheus_with_workspace(workspace_id, datasource_id)
+            return datasource_id
 
     print("🔧 Creating Prometheus datasource...")
 
+    # Grant anonymous users access to the Prometheus datasource when anonymous auth is enabled
+    anonymous_auth = os.getenv("ANONYMOUS_AUTH_ENABLED", "false").lower() == "true"
+    allowed_roles = ["all_access", "opendistro_security_anonymous_role"] if anonymous_auth else ["all_access"]
+
     payload = {
         "name": datasource_name,
-        "allowedRoles": [],
+        "allowedRoles": allowed_roles,
         "connector": "prometheus",
         "properties": desired_properties,
     }
@@ -707,8 +778,10 @@ def create_opensearch_datasource(workspace_id):
     # OSD_DATASOURCE_ENDPOINT lets operators override the endpoint written
     # onto the saved object — useful when OSD runs outside the compose
     # network and cannot resolve the `opensearch` service name. Falls back
-    # to the intra-network hostname when unset.
-    opensearch_endpoint = os.getenv("OSD_DATASOURCE_ENDPOINT", OPENSEARCH_ENDPOINT)
+    # to the intra-network hostname when unset or blank. Treat empty as
+    # unset — os.getenv's default only fires when the key is absent, not
+    # empty, and the env var may be set to "".
+    opensearch_endpoint = os.getenv("OSD_DATASOURCE_ENDPOINT") or OPENSEARCH_ENDPOINT
 
     payload = {
         "attributes": {
@@ -1062,6 +1135,87 @@ def set_default_dashboard(workspace_id, dashboard_id):
             print(f"⚠️  Setting default dashboard failed: {response.text}")
     except requests.exceptions.RequestException as e:
         print(f"⚠️  Error setting default dashboard: {e}")
+
+
+def set_trace_analytics_indices(workspace_id, span_indices, service_indices):
+    """Configure Trace Analytics span/service-map index patterns.
+
+    The OSD Observability plugin's Trace Analytics view defaults to
+    `otel-v1-apm-span-*` / `otel-v1-apm-service-map*`. Eval-suite data lives
+    under the `eval-*` prefix; pointing the plugin at a comma-separated
+    pattern list lets operators smoke-test eval ingest from the UI without
+    losing visibility of standard otel-* traffic.
+
+    Stored as user-editable advanced settings (saved objects), not as
+    `uiSettings.overrides` in opensearch_dashboards.yml — operators can
+    still flip patterns from Stack Management → Advanced Settings.
+
+    Writes at BOTH global scope and workspace scope. OSD's settings API
+    is keyed off the URL: `/api/opensearch-dashboards/settings` writes
+    the global config saved-object, `/w/<id>/api/opensearch-dashboards/settings`
+    writes a workspace-scoped one. Without the global write, operators
+    on the home page (no workspace context) see plugin defaults; without
+    the workspace write, operators inside the workspace see plugin
+    defaults. Both are needed for consistent behavior across the UI.
+
+    Idempotent: POSTing the same payload re-applies the same values.
+    Verified: a follow-up GET confirms the userValue matches what we
+    asked for; a mismatch is logged loudly so silent drift surfaces.
+    """
+    print(f"🔭 Setting Trace Analytics indices: spans={span_indices}, service-map={service_indices}")
+
+    expected = {
+        "observability:traceAnalyticsSpanIndices": span_indices,
+        "observability:traceAnalyticsServiceIndices": service_indices,
+        "observability:traceAnalyticsCustomModeDefault": True,
+    }
+
+    targets = [("global", f"{BASE_URL}/api/opensearch-dashboards/settings")]
+    if workspace_id and workspace_id != "default":
+        targets.append((
+            f"workspace {workspace_id}",
+            f"{BASE_URL}/w/{workspace_id}/api/opensearch-dashboards/settings",
+        ))
+
+    for scope, url in targets:
+        try:
+            response = requests.post(
+                url,
+                auth=(USERNAME, PASSWORD),
+                headers={"Content-Type": "application/json", "osd-xsrf": "true"},
+                json={"changes": expected},
+                verify=False,
+                timeout=10,
+            )
+
+            if response.status_code != 200:
+                print(f"⚠️  Setting Trace Analytics indices ({scope}) failed: {response.status_code} {response.text}")
+                continue
+
+            # POST returns 200 even when the value wasn't applied (plugin
+            # not loaded yet, role restriction). Re-read to confirm.
+            verify = requests.get(
+                url, auth=(USERNAME, PASSWORD), verify=False, timeout=10,
+            )
+            if verify.status_code != 200:
+                print(f"⚠️  Trace Analytics verify GET ({scope}) failed: {verify.status_code}")
+                continue
+
+            settings = verify.json().get("settings", {})
+            mismatches = []
+            for key, want in expected.items():
+                got = settings.get(key, {}).get("userValue")
+                if got != want:
+                    mismatches.append(f"{key}: want={want!r} got={got!r}")
+
+            if mismatches:
+                print(f"⚠️  Trace Analytics settings ({scope}) did not stick:")
+                for m in mismatches:
+                    print(f"     {m}")
+            else:
+                print(f"✅ Trace Analytics indices configured ({scope}, verified)")
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️  Error setting Trace Analytics indices ({scope}): {e}")
 
 
 def create_agent_observability_dashboard(workspace_id, traces_pattern_id):
@@ -1744,6 +1898,9 @@ def main():
     else:
         workspace_id = create_workspace()
 
+    # Set as default workspace so users skip the workspace picker
+    set_default_workspace(workspace_id)
+
     # Create index patterns (idempotent - will skip if already exist)
     # Titles must match exactly what the APM plugin expects
     logs_schema_mappings = '{"otelLogs":{"timestamp":"time","traceId":"traceId","spanId":"spanId","serviceName":"resource.attributes.service.name"}}'
@@ -1759,7 +1916,29 @@ def main():
         workspace_id, "otel-v2-apm-service-map*", "timestamp"
     )
 
+    # Eval-suite (OpenRCA, etc.) index patterns. Created so operators get
+    # a ready-made Discover/Explore view of the eval-* prefix. The Trace
+    # Analytics plugin reads its own pattern setting (set below); this is
+    # for the standard Discover/Explore views.
+    create_index_pattern(
+        workspace_id, "eval-otel-v1-apm-span-openrca-*", "endTime", "traces",
+        display_name="Eval Trace Dataset - OpenRCA"
+    )
+    create_index_pattern(
+        workspace_id, "eval-otel-v1-logs-openrca-*", "time", "logs", logs_schema_mappings,
+        display_name="Eval Log Dataset - OpenRCA"
+    )
+
     print("📊 Created index patterns for spans, logs, and service map")
+
+    # Point Trace Analytics at both the eval-* prefix and the default otel-*
+    # prefix. Comma-separated patterns are supported by the plugin's
+    # helper_functions.tsx — the value is passed verbatim to OpenSearch.
+    set_trace_analytics_indices(
+        workspace_id,
+        span_indices="eval-otel-v1-apm-span-openrca-*,otel-v1-apm-span-*",
+        service_indices="otel-v2-apm-service-map*,otel-v1-apm-service-map*",
+    )
 
     # Set logs as the default index pattern
     if logs_pattern_id:
@@ -1777,8 +1956,12 @@ def main():
     create_overview_dashboard(workspace_id)
 
     # Create self-monitoring dashboards (PromQL explore panels)
+    create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-k8s-cluster-health.yaml")
     create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-pipeline-health.yaml")
     create_promql_dashboard_from_yaml(workspace_id, "/config/dashboard-opensearch-health.yaml")
+
+    # Create saved queries for common agent observability patterns
+    create_default_saved_queries(workspace_id)
 
     # Create datasources (must happen before ndjson import so Prometheus references resolve)
     prometheus_datasource_id = create_prometheus_datasource(workspace_id)
@@ -1794,9 +1977,6 @@ def main():
         ndjson_id_mappings["54f4c1f0-2938-11f1-84ad-e734b5ac5a91"] = traces_pattern_id
     import_ndjson_dashboard(workspace_id, "/config/dashboard-astronomy-shop.ndjson", ndjson_id_mappings)
 
-    # Create saved queries for common agent observability patterns
-    create_default_saved_queries(workspace_id)
-
     # Create APM config correlation (ties traces + service map + Prometheus)
     if traces_pattern_id and service_map_pattern_id:
         # Resolve Prometheus data-connection saved object ID
@@ -1808,8 +1988,6 @@ def main():
     # Output summary
     print()
     print("🎉 Observability Stack Ready!")
-    print(f"👤 Username: {USERNAME}")
-    print(f"🔑 Password: {PASSWORD}")
 
     # Generate appropriate dashboard URL
     if workspace_id and workspace_id != "default":
@@ -1896,7 +2074,6 @@ if __name__ == "__main__":
     main()
 
     # Re-read workspace and pattern IDs for the delayed refresh.
-    # main() already printed success, so this is a background follow-up.
     workspace_id = get_existing_workspace()
     logs_id = get_existing_index_pattern(workspace_id, "logs-otel-v1*")
     traces_id = get_existing_index_pattern(workspace_id, "otel-v1-apm-span*")

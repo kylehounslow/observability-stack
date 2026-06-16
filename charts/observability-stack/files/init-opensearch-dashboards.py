@@ -778,8 +778,10 @@ def create_opensearch_datasource(workspace_id):
     # OSD_DATASOURCE_ENDPOINT lets operators override the endpoint written
     # onto the saved object — useful when OSD runs outside the compose
     # network and cannot resolve the `opensearch` service name. Falls back
-    # to the intra-network hostname when unset.
-    opensearch_endpoint = os.getenv("OSD_DATASOURCE_ENDPOINT", OPENSEARCH_ENDPOINT)
+    # to the intra-network hostname when unset or blank. Treat empty as
+    # unset — os.getenv's default only fires when the key is absent, not
+    # empty, and the env var may be set to "".
+    opensearch_endpoint = os.getenv("OSD_DATASOURCE_ENDPOINT") or OPENSEARCH_ENDPOINT
 
     payload = {
         "attributes": {
@@ -1133,6 +1135,87 @@ def set_default_dashboard(workspace_id, dashboard_id):
             print(f"⚠️  Setting default dashboard failed: {response.text}")
     except requests.exceptions.RequestException as e:
         print(f"⚠️  Error setting default dashboard: {e}")
+
+
+def set_trace_analytics_indices(workspace_id, span_indices, service_indices):
+    """Configure Trace Analytics span/service-map index patterns.
+
+    The OSD Observability plugin's Trace Analytics view defaults to
+    `otel-v1-apm-span-*` / `otel-v1-apm-service-map*`. Eval-suite data lives
+    under the `eval-*` prefix; pointing the plugin at a comma-separated
+    pattern list lets operators smoke-test eval ingest from the UI without
+    losing visibility of standard otel-* traffic.
+
+    Stored as user-editable advanced settings (saved objects), not as
+    `uiSettings.overrides` in opensearch_dashboards.yml — operators can
+    still flip patterns from Stack Management → Advanced Settings.
+
+    Writes at BOTH global scope and workspace scope. OSD's settings API
+    is keyed off the URL: `/api/opensearch-dashboards/settings` writes
+    the global config saved-object, `/w/<id>/api/opensearch-dashboards/settings`
+    writes a workspace-scoped one. Without the global write, operators
+    on the home page (no workspace context) see plugin defaults; without
+    the workspace write, operators inside the workspace see plugin
+    defaults. Both are needed for consistent behavior across the UI.
+
+    Idempotent: POSTing the same payload re-applies the same values.
+    Verified: a follow-up GET confirms the userValue matches what we
+    asked for; a mismatch is logged loudly so silent drift surfaces.
+    """
+    print(f"🔭 Setting Trace Analytics indices: spans={span_indices}, service-map={service_indices}")
+
+    expected = {
+        "observability:traceAnalyticsSpanIndices": span_indices,
+        "observability:traceAnalyticsServiceIndices": service_indices,
+        "observability:traceAnalyticsCustomModeDefault": True,
+    }
+
+    targets = [("global", f"{BASE_URL}/api/opensearch-dashboards/settings")]
+    if workspace_id and workspace_id != "default":
+        targets.append((
+            f"workspace {workspace_id}",
+            f"{BASE_URL}/w/{workspace_id}/api/opensearch-dashboards/settings",
+        ))
+
+    for scope, url in targets:
+        try:
+            response = requests.post(
+                url,
+                auth=(USERNAME, PASSWORD),
+                headers={"Content-Type": "application/json", "osd-xsrf": "true"},
+                json={"changes": expected},
+                verify=False,
+                timeout=10,
+            )
+
+            if response.status_code != 200:
+                print(f"⚠️  Setting Trace Analytics indices ({scope}) failed: {response.status_code} {response.text}")
+                continue
+
+            # POST returns 200 even when the value wasn't applied (plugin
+            # not loaded yet, role restriction). Re-read to confirm.
+            verify = requests.get(
+                url, auth=(USERNAME, PASSWORD), verify=False, timeout=10,
+            )
+            if verify.status_code != 200:
+                print(f"⚠️  Trace Analytics verify GET ({scope}) failed: {verify.status_code}")
+                continue
+
+            settings = verify.json().get("settings", {})
+            mismatches = []
+            for key, want in expected.items():
+                got = settings.get(key, {}).get("userValue")
+                if got != want:
+                    mismatches.append(f"{key}: want={want!r} got={got!r}")
+
+            if mismatches:
+                print(f"⚠️  Trace Analytics settings ({scope}) did not stick:")
+                for m in mismatches:
+                    print(f"     {m}")
+            else:
+                print(f"✅ Trace Analytics indices configured ({scope}, verified)")
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️  Error setting Trace Analytics indices ({scope}): {e}")
 
 
 def create_agent_observability_dashboard(workspace_id, traces_pattern_id):
@@ -1833,7 +1916,29 @@ def main():
         workspace_id, "otel-v2-apm-service-map*", "timestamp"
     )
 
+    # Eval-suite (OpenRCA, etc.) index patterns. Created so operators get
+    # a ready-made Discover/Explore view of the eval-* prefix. The Trace
+    # Analytics plugin reads its own pattern setting (set below); this is
+    # for the standard Discover/Explore views.
+    create_index_pattern(
+        workspace_id, "eval-otel-v1-apm-span-openrca-*", "endTime", "traces",
+        display_name="Eval Trace Dataset - OpenRCA"
+    )
+    create_index_pattern(
+        workspace_id, "eval-otel-v1-logs-openrca-*", "time", "logs", logs_schema_mappings,
+        display_name="Eval Log Dataset - OpenRCA"
+    )
+
     print("📊 Created index patterns for spans, logs, and service map")
+
+    # Point Trace Analytics at both the eval-* prefix and the default otel-*
+    # prefix. Comma-separated patterns are supported by the plugin's
+    # helper_functions.tsx — the value is passed verbatim to OpenSearch.
+    set_trace_analytics_indices(
+        workspace_id,
+        span_indices="eval-otel-v1-apm-span-openrca-*,otel-v1-apm-span-*",
+        service_indices="otel-v2-apm-service-map*,otel-v1-apm-service-map*",
+    )
 
     # Set logs as the default index pattern
     if logs_pattern_id:
