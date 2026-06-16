@@ -28,6 +28,15 @@ opensearch_jvm_heap      = "8g"     # 50% of 16 GB request
 cortex_storage_size      = "50Gi"
 cortex_storage_class     = "gp3"
 
+# Data Prepper — sized for sustained trace ingest. The otel_traces
+# processor buffers all in-flight spans for trace_flush_interval before
+# emitting traceGroup; at ~5K spans/sec sustained that's ~450K spans
+# buffered at a 90s window. 8g heap gives comfortable headroom. See
+# openrca/eda/trace_duration_distribution.md for the sizing math.
+data_prepper_memory               = "12Gi"
+data_prepper_jvm_heap             = "8g"
+data_prepper_trace_flush_interval = 90
+
 # OTel Demo — must stay disabled for benchmark runs.
 # Demo writes spans/logs/metrics to the default otel-v1-apm-span-* and
 # logs-otel-v1-* indices. The OpenRCA suite relies on the eval-* prefix
