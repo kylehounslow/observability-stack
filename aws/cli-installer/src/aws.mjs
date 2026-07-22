@@ -1553,6 +1553,130 @@ export async function listSecurityGroups(region, vpcId) {
   }));
 }
 
+/**
+ * Validate the VPC topology against live EC2 state so the run fails fast, before
+ * any OpenSearch/OSIS resources are created. The syntactic checks in
+ * validateConfig() only confirm the IDs are well-formed; this confirms they
+ * actually exist, belong together, and satisfy OpenSearch's zone-awareness rules.
+ *
+ * Catches (each of which otherwise surfaces minutes into domain/pipeline creation):
+ *   - VPC does not exist / wrong region.
+ *   - A subnet or security group is not a member of the given VPC. OpenSearch's
+ *     CreateDomain rejects a subnet/SG that lives in a different VPC.
+ *   - Two subnets share an Availability Zone. createOpenSearch() derives the
+ *     zone-awareness AZ count from the subnet count (min(subnetIds.length, 3)),
+ *     so duplicate AZs make CreateDomain fail with a ValidationException.
+ *
+ * @param {object} cfg  the resolved config (needs region, vpcId, subnetIds, securityGroupIds)
+ * @param {object} [deps]  optional injected EC2 accessors for testing
+ * @returns {Promise<string[]>}  error strings (empty = valid)
+ */
+export async function validateVpcTopology(cfg, deps = {}) {
+  // Only relevant when a VPC deployment was requested. Well-formedness is assumed
+  // to have been checked by validateConfig() already.
+  if (!cfg.vpcId) return [];
+
+  const describeVpcs = deps.describeVpcs || (async (region, ids) => {
+    const { EC2Client, DescribeVpcsCommand } = await import('@aws-sdk/client-ec2');
+    const client = new EC2Client({ region });
+    return (await client.send(new DescribeVpcsCommand({ VpcIds: ids }))).Vpcs || [];
+  });
+  const describeSubnets = deps.describeSubnets || (async (region, ids) => {
+    const { EC2Client, DescribeSubnetsCommand } = await import('@aws-sdk/client-ec2');
+    const client = new EC2Client({ region });
+    return (await client.send(new DescribeSubnetsCommand({ SubnetIds: ids }))).Subnets || [];
+  });
+  const describeSecurityGroups = deps.describeSecurityGroups || (async (region, ids) => {
+    const { EC2Client, DescribeSecurityGroupsCommand } = await import('@aws-sdk/client-ec2');
+    const client = new EC2Client({ region });
+    return (await client.send(new DescribeSecurityGroupsCommand({ GroupIds: ids }))).SecurityGroups || [];
+  });
+
+  const errors = [];
+  const region = cfg.region;
+  const subnetIds = cfg.subnetIds || [];
+  const securityGroupIds = cfg.securityGroupIds || [];
+
+  // 1. VPC exists. A missing/invalid VPC throws InvalidVpcID.NotFound — translate
+  //    that into a clean error rather than an SDK stack trace.
+  try {
+    const vpcs = await describeVpcs(region, [cfg.vpcId]);
+    if (!vpcs.length) {
+      errors.push(`VPC ${cfg.vpcId} was not found in ${region}. Check the ID and region.`);
+      return errors; // Nothing else can be validated without the VPC.
+    }
+  } catch (err) {
+    if (/InvalidVpcID\.NotFound|does not exist/i.test(err.message || '')) {
+      errors.push(`VPC ${cfg.vpcId} was not found in ${region}. Check the ID and region.`);
+    } else {
+      errors.push(`Could not verify VPC ${cfg.vpcId}: ${err.message}`);
+    }
+    return errors;
+  }
+
+  // 2. Subnets: each must exist and belong to the VPC; collect their AZs.
+  if (subnetIds.length) {
+    try {
+      const subnets = await describeSubnets(region, subnetIds);
+      const found = new Map(subnets.map((s) => [s.SubnetId, s]));
+      for (const id of subnetIds) {
+        const s = found.get(id);
+        if (!s) {
+          errors.push(`Subnet ${id} was not found in ${region}.`);
+        } else if (s.VpcId !== cfg.vpcId) {
+          errors.push(`Subnet ${id} belongs to VPC ${s.VpcId}, not ${cfg.vpcId}. All subnets must be in the target VPC.`);
+        }
+      }
+      // Zone-awareness: subnets must be in distinct AZs. createOpenSearch()
+      // enables zone awareness with AvailabilityZoneCount = min(subnetIds, 3)
+      // and places one node group per AZ, so two subnets in the same AZ make
+      // CreateDomain fail. Only meaningful with more than one subnet.
+      const inVpc = subnets.filter((s) => s.VpcId === cfg.vpcId);
+      if (inVpc.length > 1) {
+        const azSeen = new Map();
+        for (const s of inVpc) {
+          const az = s.AvailabilityZone;
+          if (azSeen.has(az)) {
+            errors.push(`Subnets ${azSeen.get(az)} and ${s.SubnetId} are both in ${az}. OpenSearch requires each subnet to be in a distinct Availability Zone for a zone-aware domain.`);
+          } else {
+            azSeen.set(az, s.SubnetId);
+          }
+        }
+      }
+    } catch (err) {
+      if (/InvalidSubnetID\.NotFound|does not exist/i.test(err.message || '')) {
+        errors.push(`One or more subnets were not found in ${region}: ${subnetIds.join(', ')}.`);
+      } else {
+        errors.push(`Could not verify subnets: ${err.message}`);
+      }
+    }
+  }
+
+  // 3. Security groups: each must exist and belong to the VPC.
+  if (securityGroupIds.length) {
+    try {
+      const groups = await describeSecurityGroups(region, securityGroupIds);
+      const found = new Map(groups.map((g) => [g.GroupId, g]));
+      for (const id of securityGroupIds) {
+        const g = found.get(id);
+        if (!g) {
+          errors.push(`Security group ${id} was not found in ${region}.`);
+        } else if (g.VpcId !== cfg.vpcId) {
+          errors.push(`Security group ${id} belongs to VPC ${g.VpcId}, not ${cfg.vpcId}. All security groups must be in the target VPC.`);
+        }
+      }
+    } catch (err) {
+      if (/InvalidGroup\.NotFound|does not exist/i.test(err.message || '')) {
+        errors.push(`One or more security groups were not found in ${region}: ${securityGroupIds.join(', ')}.`);
+      } else {
+        errors.push(`Could not verify security groups: ${err.message}`);
+      }
+    }
+  }
+
+  return errors;
+}
+
 // ── Pipeline listing / describe / update ─────────────────────────────────────
 
 /**

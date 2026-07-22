@@ -14,10 +14,12 @@ import {
   createConnectedDataSourceRole,
   createConnectedDataSource,
   createOpenSearchApplication,
+  validateVpcTopology,
 } from './aws.mjs';
 import {
   printError,
   printSuccess,
+  printStep,
   printPanel,
   printBox,
   STAR,
@@ -92,6 +94,22 @@ export async function run() {
  */
 export async function executePipeline(cfg) {
   await checkRequirements(cfg);
+
+  // Live VPC validation — verify the VPC/subnets/SGs exist, belong together, and
+  // satisfy zone-awareness before creating any OpenSearch resources. Fails fast
+  // so we don't leave a half-built stack when the network inputs are wrong.
+  if (cfg.vpcId) {
+    printStep('Validating VPC network configuration...');
+    const vpcErrors = await validateVpcTopology(cfg);
+    if (vpcErrors.length) {
+      console.error();
+      for (const e of vpcErrors) printError(e);
+      throw new Error('VPC configuration is invalid; no resources were created.');
+    }
+    printSuccess('VPC, subnets, and security groups validated');
+    console.error();
+  }
+
   printSummary(cfg);
   console.error();
 

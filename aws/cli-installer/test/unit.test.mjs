@@ -390,10 +390,139 @@ describe('validateConfig — VPC options', () => {
 
 import {
   fgacPrincipals,
+  validateVpcTopology,
   _withRetry,
   _isRoleNotPropagatedError,
   _isTransientHttpError,
 } from '../src/aws.mjs';
+
+// ── Live VPC topology validation (EC2 API path) ───────────────────────────────
+// validateVpcTopology takes injected EC2 accessors so we can exercise every
+// branch without real AWS calls.
+
+describe('validateVpcTopology', () => {
+  const cfg = {
+    region: 'us-east-1',
+    vpcId: 'vpc-aaa',
+    subnetIds: ['subnet-1', 'subnet-2'],
+    securityGroupIds: ['sg-1'],
+  };
+
+  // Happy-path accessors: everything exists, in the target VPC, distinct AZs.
+  function goodDeps() {
+    return {
+      describeVpcs: async () => [{ VpcId: 'vpc-aaa' }],
+      describeSubnets: async () => [
+        { SubnetId: 'subnet-1', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+        { SubnetId: 'subnet-2', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1b' },
+      ],
+      describeSecurityGroups: async () => [{ GroupId: 'sg-1', VpcId: 'vpc-aaa' }],
+    };
+  }
+
+  it('returns [] with no VPC configured (skips EC2 calls)', async () => {
+    let called = false;
+    const errors = await validateVpcTopology(
+      { region: 'us-east-1', vpcId: '', subnetIds: [], securityGroupIds: [] },
+      { describeVpcs: async () => { called = true; return []; } },
+    );
+    assert.deepEqual(errors, []);
+    assert.equal(called, false);
+  });
+
+  it('passes for a valid VPC topology', async () => {
+    assert.deepEqual(await validateVpcTopology(cfg, goodDeps()), []);
+  });
+
+  it('reports a missing VPC and stops', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeVpcs: async () => [],
+    });
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /VPC vpc-aaa was not found/);
+  });
+
+  it('translates InvalidVpcID.NotFound into a clean error', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeVpcs: async () => { throw new Error('InvalidVpcID.NotFound: The vpc ID does not exist'); },
+    });
+    assert.match(errors[0], /VPC vpc-aaa was not found/);
+  });
+
+  it('flags a subnet that belongs to a different VPC', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeSubnets: async () => [
+        { SubnetId: 'subnet-1', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+        { SubnetId: 'subnet-2', VpcId: 'vpc-other', AvailabilityZone: 'us-east-1b' },
+      ],
+    });
+    assert.ok(errors.some((e) => /Subnet subnet-2 belongs to VPC vpc-other/.test(e)));
+  });
+
+  it('flags a subnet that does not exist', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeSubnets: async () => [
+        { SubnetId: 'subnet-1', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+      ],
+    });
+    assert.ok(errors.some((e) => /Subnet subnet-2 was not found/.test(e)));
+  });
+
+  it('flags two subnets sharing an Availability Zone (zone-awareness edge case)', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeSubnets: async () => [
+        { SubnetId: 'subnet-1', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+        { SubnetId: 'subnet-2', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+      ],
+    });
+    assert.ok(errors.some((e) => /both in us-east-1a/.test(e) && /distinct Availability Zone/.test(e)));
+  });
+
+  it('does not flag AZ collisions for a single-subnet domain', async () => {
+    const single = { ...cfg, subnetIds: ['subnet-1'] };
+    const errors = await validateVpcTopology(single, {
+      ...goodDeps(),
+      describeSubnets: async () => [
+        { SubnetId: 'subnet-1', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+      ],
+    });
+    assert.deepEqual(errors, []);
+  });
+
+  it('flags a security group that belongs to a different VPC', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeSecurityGroups: async () => [{ GroupId: 'sg-1', VpcId: 'vpc-other' }],
+    });
+    assert.ok(errors.some((e) => /Security group sg-1 belongs to VPC vpc-other/.test(e)));
+  });
+
+  it('flags a security group that does not exist', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      ...goodDeps(),
+      describeSecurityGroups: async () => [],
+    });
+    assert.ok(errors.some((e) => /Security group sg-1 was not found/.test(e)));
+  });
+
+  it('accumulates multiple independent problems in one pass', async () => {
+    const errors = await validateVpcTopology(cfg, {
+      describeVpcs: async () => [{ VpcId: 'vpc-aaa' }],
+      describeSubnets: async () => [
+        { SubnetId: 'subnet-1', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+        { SubnetId: 'subnet-2', VpcId: 'vpc-aaa', AvailabilityZone: 'us-east-1a' },
+      ],
+      describeSecurityGroups: async () => [{ GroupId: 'sg-1', VpcId: 'vpc-other' }],
+    });
+    assert.ok(errors.some((e) => /both in us-east-1a/.test(e)));
+    assert.ok(errors.some((e) => /Security group sg-1 belongs to VPC vpc-other/.test(e)));
+  });
+});
 
 // ── Creation ordering / race-condition guards ────────────────────────────────
 
