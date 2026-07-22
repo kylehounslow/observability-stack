@@ -8,6 +8,7 @@ import {
   createApsWorkspace,
   createOsiPipeline,
   mapOsiRoleInDomain,
+  mapOsiRoleViaOpenSearchUI,
   createAossDataAccessPolicy,
   setupDashboards,
   createConnectedDataSourceRole,
@@ -143,6 +144,14 @@ export async function executePipeline(cfg) {
     console.error();
   }
 
+  // For VPC-private domains, FGAC role mapping is deferred until the managed
+  // OpenSearch UI (Application) exists, since the UI proxies to the domain over
+  // the AWS-internal path — no in-VPC network access needed from this host.
+  if (cfg.deferFgacToUi) {
+    await mapOsiRoleViaOpenSearchUI(cfg);
+    console.error();
+  }
+
   // Generate pipeline YAML
   const pipelineYaml = renderPipeline(cfg);
 
@@ -181,7 +190,9 @@ export async function executePipeline(cfg) {
     `${theme.label(pad('OSI Pipeline Role:'))} ${cfg.iamRoleArn}`,
     `${theme.label(pad('OpenSearch:'))} ${link(cfg.opensearchEndpoint)}`,
     ...(cfg.opensearchType !== 'serverless' ? [
-    `${theme.label(pad('OpenSearch Master Password:'))} Secrets Manager: observability-stack/${cfg.pipelineName}/master-password`,
+      cfg.iamMasterArn
+        ? `${theme.label(pad('OpenSearch Master:'))} IAM principal ${cfg.iamMasterArn}`
+        : `${theme.label(pad('OpenSearch Master Password:'))} Secrets Manager: observability-stack/${cfg.pipelineName}/master-password`,
     ] : []),
     `${theme.label(pad('OpenSearch UI:'))} ${link(cfg.dashboardsUrl)}`,
     `${theme.label(pad('Prometheus:'))} ${link(cfg.prometheusUrl)}`,
@@ -234,6 +245,13 @@ function printSummary(cfg) {
     osEntries.push(['Instance count', String(cfg.osInstanceCount)]);
     osEntries.push(['Volume size', `${cfg.osVolumeSize} GB`]);
     osEntries.push(['Engine version', cfg.osEngineVersion]);
+    if (cfg.vpcId) {
+      osEntries.push(['Network', `VPC ${cfg.vpcId}`]);
+      osEntries.push(['Subnets', cfg.subnetIds.join(', ')]);
+      osEntries.push(['Security groups', cfg.securityGroupIds.join(', ')]);
+    } else {
+      osEntries.push(['Network', 'public endpoint']);
+    }
   }
 
   // IAM

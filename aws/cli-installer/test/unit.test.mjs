@@ -297,3 +297,113 @@ describe('renderPipeline', () => {
     assert.ok(yaml.startsWith("version: '2'"));
   });
 });
+
+// ── VPC / network topology tests ──────────────────────────────────────────────
+
+import { validateConfig } from '../src/cli.mjs';
+
+function baseCfg(overrides = {}) {
+  return {
+    pipelineName: 'obs-stack-test',
+    region: 'us-east-1',
+    osAction: 'create',
+    osDomainName: 'obs-stack-test',
+    iamAction: 'create',
+    apsAction: 'create',
+    dashboardsAction: 'create',
+    vpcId: '',
+    subnetIds: [],
+    securityGroupIds: [],
+    ...overrides,
+  };
+}
+
+describe('validateConfig — VPC options', () => {
+  it('passes with no VPC options (public default)', () => {
+    assert.deepEqual(validateConfig(baseCfg()), []);
+  });
+
+  it('passes with a complete VPC config', () => {
+    const errors = validateConfig(baseCfg({
+      vpcId: 'vpc-0a1b2c3d4e5f60718',
+      subnetIds: ['subnet-0aaaa1111bbbb2222', 'subnet-0cccc3333dddd4444'],
+      securityGroupIds: ['sg-0eeee5555ffff6666'],
+    }));
+    assert.deepEqual(errors, []);
+  });
+
+  it('requires subnets and SGs when a VPC is given', () => {
+    const errors = validateConfig(baseCfg({ vpcId: 'vpc-0a1b2c3d4e5f60718' }));
+    assert.ok(errors.some((e) => e.includes('--subnet-ids is required')));
+    assert.ok(errors.some((e) => e.includes('--security-group-ids is required')));
+  });
+
+  it('requires a VPC when only subnets are given', () => {
+    const errors = validateConfig(baseCfg({ subnetIds: ['subnet-0aaaa1111bbbb2222'] }));
+    assert.ok(errors.some((e) => e.includes('--vpc-id is required')));
+  });
+
+  it('rejects malformed IDs', () => {
+    const errors = validateConfig(baseCfg({
+      vpcId: 'notavpc',
+      subnetIds: ['sub-xyz'],
+      securityGroupIds: ['group-1'],
+    }));
+    assert.ok(errors.some((e) => e.includes('--vpc-id must look like')));
+    assert.ok(errors.some((e) => e.includes('Invalid subnet ID')));
+    assert.ok(errors.some((e) => e.includes('Invalid security group ID')));
+  });
+
+  it('rejects more than 3 subnets', () => {
+    const errors = validateConfig(baseCfg({
+      vpcId: 'vpc-0a1b2c3d4e5f60718',
+      subnetIds: ['subnet-1', 'subnet-2', 'subnet-3', 'subnet-4'],
+      securityGroupIds: ['sg-0eeee5555ffff6666'],
+    }));
+    assert.ok(errors.some((e) => e.includes('at most 3 subnets')));
+  });
+
+  it('rejects VPC options when reusing an existing domain', () => {
+    const errors = validateConfig(baseCfg({
+      osAction: 'reuse',
+      opensearchEndpoint: 'https://search-foo-abc.us-east-1.es.amazonaws.com',
+      vpcId: 'vpc-0a1b2c3d4e5f60718',
+      subnetIds: ['subnet-0aaaa1111bbbb2222'],
+      securityGroupIds: ['sg-0eeee5555ffff6666'],
+    }));
+    assert.ok(errors.some((e) => e.includes('VPC options apply only when creating')));
+  });
+});
+
+import { fgacPrincipals } from '../src/aws.mjs';
+
+describe('fgacPrincipals — FGAC role/user set', () => {
+  const osiRole = 'arn:aws:iam::123456789012:role/obs-stack-test-osi-role';
+
+  it('always includes the OSI pipeline role as a backend role', () => {
+    const { backendRoles, users } = fgacPrincipals({ iamRoleArn: osiRole });
+    assert.deepEqual(backendRoles, [osiRole]);
+    assert.deepEqual(users, []);
+  });
+
+  it('adds a role-type caller principal as a backend role', () => {
+    const caller = { arn: 'arn:aws:iam::123456789012:role/Admin', type: 'role' };
+    const { backendRoles, users } = fgacPrincipals({ iamRoleArn: osiRole, callerPrincipal: caller });
+    assert.deepEqual(backendRoles, [osiRole, caller.arn]);
+    assert.deepEqual(users, []);
+  });
+
+  it('adds a user-type caller principal as a user, not a backend role', () => {
+    const caller = { arn: 'arn:aws:iam::123456789012:user/kyle', type: 'user' };
+    const { backendRoles, users } = fgacPrincipals({ iamRoleArn: osiRole, callerPrincipal: caller });
+    assert.deepEqual(backendRoles, [osiRole]);
+    assert.deepEqual(users, [caller.arn]);
+  });
+
+  it('does not duplicate the caller when it equals the OSI role', () => {
+    const caller = { arn: osiRole, type: 'role' };
+    const { backendRoles, users } = fgacPrincipals({ iamRoleArn: osiRole, callerPrincipal: caller });
+    assert.deepEqual(backendRoles, [osiRole]);
+    assert.deepEqual(users, []);
+  });
+});
