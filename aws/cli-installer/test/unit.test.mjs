@@ -627,3 +627,54 @@ describe('fgacPrincipals — FGAC role/user set', () => {
     assert.deepEqual(users, []);
   });
 });
+
+// ── Pre-deploy architecture diagram (VPC annotations) ─────────────────────────
+
+import { renderArchitectureDiagram } from '../src/commands/create.mjs';
+
+describe('renderArchitectureDiagram — VPC annotations', () => {
+  const strip = (s) => s.replace(/\x1B\[[0-9;]*m/g, '');
+  const pub = () => ({ pipelineName: 'obs-stack-test', opensearchType: 'managed' });
+  const vpc = () => ({
+    ...pub(),
+    vpcId: 'vpc-0a1b2c3d',
+    subnetIds: ['subnet-aaaa', 'subnet-bbbb'],
+    securityGroupIds: ['sg-0eeee'],
+  });
+  // Box rows carry the widths that the positional math depends on.
+  const boxRowWidths = (lines) =>
+    lines.map(strip).filter((l) => /[┌└│]/.test(l)).map((l) => l.trimEnd().length);
+
+  it('public render has no network header and no [vpc] tags', () => {
+    const text = renderArchitectureDiagram(pub()).map(strip).join('\n');
+    assert.ok(!text.includes('[vpc]'));
+    assert.ok(!text.includes('Network topology'));
+  });
+
+  it('VPC render shows a header with the VPC, subnet, and SG IDs', () => {
+    const text = renderArchitectureDiagram(vpc()).map(strip).join('\n');
+    assert.ok(text.includes('Network topology'));
+    assert.ok(text.includes('vpc-0a1b2c3d'));
+    assert.ok(text.includes('subnet-aaaa') && text.includes('subnet-bbbb'));
+    assert.ok(text.includes('sg-0eeee'));
+  });
+
+  it('tags exactly the private boxes (EC2, OSI endpoint, OpenSearch)', () => {
+    const lines = renderArchitectureDiagram(vpc()).map(strip);
+    const tagged = lines.filter((l) => l.includes('[vpc]') && /│/.test(l));
+    // Three in-VPC boxes; Prometheus/CDS/UI are regional and stay untagged.
+    assert.equal(tagged.length, 3);
+    assert.ok(tagged.some((l) => l.includes('EC2 Instance')));
+    assert.ok(tagged.some((l) => l.includes('OSI Endpoint')));
+    assert.ok(tagged.some((l) => l.includes('OpenSearch') && !l.includes('OpenSearch UI')));
+    // Regional services are never tagged. AWS Prometheus shares a row with the
+    // OpenSearch box, so check that no [vpc] appears within the Prometheus cell
+    // (the text at or after "AWS Prometheus"), not merely on the same line.
+    const promCell = (l) => l.slice(l.indexOf('AWS Prometheus'));
+    assert.ok(!lines.some((l) => l.includes('AWS Prometheus') && promCell(l).includes('[vpc]')));
+  });
+
+  it('adds no width to any box vs. the public render (column math unchanged)', () => {
+    assert.deepEqual(boxRowWidths(renderArchitectureDiagram(vpc())), boxRowWidths(renderArchitectureDiagram(pub())));
+  });
+});
