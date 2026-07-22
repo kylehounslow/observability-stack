@@ -106,15 +106,6 @@ export function renderArchitectureDiagram(cfg) {
   // ── Assemble lines ────────────────────────────────────────────────────
   const out = [''];
 
-  // Network-topology header — only in VPC mode. Surfaces the IDs the operator
-  // is about to deploy into, and states which boxes are private vs. regional.
-  if (inVpc) {
-    out.push(a('Network topology'));
-    out.push(m(`VPC ${cfg.vpcId}  ·  subnets ${(cfg.subnetIds || []).join(', ')}  ·  security groups ${(cfg.securityGroupIds || []).join(', ')}`));
-    out.push(m(`${theme.success('[vpc]')} boxes run inside the VPC; Prometheus, Connected Data Source, and the UI are regional (AWS-internal path).`));
-    out.push('');
-  }
-
   // EC2 Demo box (above OTLP)
   const ec2 = box([p('EC2 Instance') + vpcTag, m('OTel Demo + Agents')], 21);
   const ec2Off = Math.max(0, C_OTLP - ec2.mid);
@@ -200,6 +191,17 @@ export function renderArchitectureDiagram(cfg) {
   out.push(sp(dashOff) + dash.top);
   for (const l of dash.lines) out.push(sp(dashOff) + l);
   out.push(sp(dashOff) + dash.bot);
+
+  // Network-topology legend — only in VPC mode. Placed after the diagram (not
+  // before) so it reads as a caption on what was just drawn and isn't scrolled
+  // past. Surfaces the IDs being deployed into and which boxes are private.
+  if (inVpc) {
+    out.push('');
+    out.push(a('Network topology'));
+    out.push(m(`VPC ${cfg.vpcId}  ·  subnets ${(cfg.subnetIds || []).join(', ')}  ·  security groups ${(cfg.securityGroupIds || []).join(', ')}`));
+    out.push(m(`${theme.success('[vpc]')} boxes run inside the VPC; Prometheus, Connected Data Source, and the UI are regional (AWS-internal path).`));
+  }
+
   out.push('');
 
   return out;
