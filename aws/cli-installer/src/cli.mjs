@@ -250,6 +250,13 @@ export function validateConfig(cfg) {
   }
   if (!cfg.region) errors.push('--region is required');
 
+  // OpenSearch backend must be resolved to either create or reuse. In advanced
+  // mode with no OpenSearch flags, osAction stays empty and the domain step is
+  // silently skipped — the run then fails deep in pipeline creation with an empty
+  // endpoint. Catch it up front so the CLI fails fast with a clear message.
+  if (!cfg.osAction) {
+    errors.push('No OpenSearch backend specified. Pass --os-domain-name (create a managed domain), --aoss-collection-name (create a serverless collection), or --opensearch-endpoint (reuse an existing one). Or run with --quick to auto-create defaults.');
+  }
   if (cfg.osAction === 'reuse' && !cfg.opensearchEndpoint) {
     errors.push('--opensearch-endpoint required when reusing OpenSearch');
   }

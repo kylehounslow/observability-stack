@@ -363,6 +363,19 @@ describe('validateConfig — VPC options', () => {
     assert.ok(errors.some((e) => e.includes('at most 3 subnets')));
   });
 
+  it('fails fast when VPC flags are given but no OpenSearch backend is chosen', () => {
+    // Advanced mode with only VPC flags: osAction stays empty. Regression guard —
+    // this used to skip domain creation and fail deep in pipeline creation.
+    const errors = validateConfig(baseCfg({
+      osAction: '',
+      osDomainName: '',
+      vpcId: 'vpc-0a1b2c3d4e5f60718',
+      subnetIds: ['subnet-0aaaa1111bbbb2222', 'subnet-0cccc3333dddd4444'],
+      securityGroupIds: ['sg-0eeee5555ffff6666'],
+    }));
+    assert.ok(errors.some((e) => e.includes('No OpenSearch backend specified')));
+  });
+
   it('rejects VPC options when reusing an existing domain', () => {
     const errors = validateConfig(baseCfg({
       osAction: 'reuse',
@@ -375,7 +388,85 @@ describe('validateConfig — VPC options', () => {
   });
 });
 
-import { fgacPrincipals } from '../src/aws.mjs';
+import {
+  fgacPrincipals,
+  _withRetry,
+  _isRoleNotPropagatedError,
+  _isTransientHttpError,
+} from '../src/aws.mjs';
+
+// ── Creation ordering / race-condition guards ────────────────────────────────
+
+describe('withRetry', () => {
+  const fast = { delayMs: 1, backoff: 1, maxDelayMs: 1 };
+
+  it('returns the result on first success without retrying', async () => {
+    let calls = 0;
+    const out = await _withRetry(async () => { calls++; return 'ok'; }, fast);
+    assert.equal(out, 'ok');
+    assert.equal(calls, 1);
+  });
+
+  it('retries transient failures then succeeds', async () => {
+    let calls = 0;
+    const out = await _withRetry(async () => {
+      calls++;
+      if (calls < 3) throw new Error('ECONNREFUSED');
+      return 'ok';
+    }, { ...fast, attempts: 5, shouldRetry: _isTransientHttpError });
+    assert.equal(out, 'ok');
+    assert.equal(calls, 3);
+  });
+
+  it('stops immediately when shouldRetry returns false', async () => {
+    let calls = 0;
+    await assert.rejects(
+      _withRetry(async () => { calls++; throw new Error('nope'); }, { ...fast, shouldRetry: () => false }),
+      /nope/,
+    );
+    assert.equal(calls, 1);
+  });
+
+  it('rethrows the last error after exhausting attempts', async () => {
+    let calls = 0;
+    await assert.rejects(
+      _withRetry(async () => { calls++; throw new Error('still failing'); }, { ...fast, attempts: 3 }),
+      /still failing/,
+    );
+    assert.equal(calls, 3);
+  });
+});
+
+describe('isRoleNotPropagatedError', () => {
+  it('matches OSIS/OpenSearch assume-role propagation errors', () => {
+    for (const msg of [
+      'The role arn:aws:iam::123:role/foo cannot be assumed',
+      'is not authorized to perform: sts:AssumeRole',
+      'role arn:aws:iam::123:role/foo does not exist',
+      'Invalid PipelineRoleArn',
+    ]) {
+      assert.ok(_isRoleNotPropagatedError(new Error(msg)), `expected retry for: ${msg}`);
+    }
+  });
+
+  it('does not match unrelated errors', () => {
+    assert.ok(!_isRoleNotPropagatedError(new Error('AccessDeniedException: es:CreateDomain')));
+    assert.ok(!_isRoleNotPropagatedError(new Error('quota exceeded')));
+  });
+});
+
+describe('isTransientHttpError', () => {
+  it('matches connection and gateway errors', () => {
+    for (const msg of ['ECONNREFUSED', 'socket hang up', 'fetch failed', 'returned 503', 'gateway timeout']) {
+      assert.ok(_isTransientHttpError(new Error(msg)), `expected transient for: ${msg}`);
+    }
+  });
+
+  it('does not match a plain 400 / auth error', () => {
+    assert.ok(!_isTransientHttpError(new Error('400 bad request: malformed body')));
+    assert.ok(!_isTransientHttpError(new Error('ValidationException')));
+  });
+});
 
 describe('fgacPrincipals — FGAC role/user set', () => {
   const osiRole = 'arn:aws:iam::123456789012:role/obs-stack-test-osi-role';

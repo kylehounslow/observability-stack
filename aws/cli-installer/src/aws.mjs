@@ -243,14 +243,18 @@ async function createManagedDomain(cfg) {
   // Check if domain already exists
   try {
     const desc = await client.send(new DescribeDomainCommand({ DomainName: cfg.osDomainName }));
-    const endpoint = domainEndpoint(desc.DomainStatus);
-    if (endpoint) {
+    const status = desc.DomainStatus || {};
+    const endpoint = domainEndpoint(status);
+    // Only short-circuit if the pre-existing domain is fully active. A domain
+    // still Processing (e.g. a prior interrupted run) must fall through to the
+    // wait loop, or downstream security-API calls race an unready cluster.
+    if (endpoint && !status.Processing && !status.UpgradeProcessing) {
       cfg.opensearchEndpoint = `https://${endpoint}`;
       printSuccess(`Domain '${cfg.osDomainName}' already exists: ${cfg.opensearchEndpoint}`);
       if (inVpc) await authorizeOpenSearchUiVpcAccess(cfg, client);
       return;
     }
-    printSuccess(`Domain '${cfg.osDomainName}' already exists — waiting for endpoint`);
+    printSuccess(`Domain '${cfg.osDomainName}' already exists — waiting for it to become active`);
   } catch (err) {
     if (err.name !== 'ResourceNotFoundException') throw err;
 
@@ -378,7 +382,13 @@ async function createManagedDomain(cfg) {
         anim.setDomainStatus(current?.Description || current?.Name || 'Initializing...');
       } catch { /* change progress may not be available yet */ }
 
-      if (endpoint) {
+      // Gate on the endpoint being present AND the domain no longer processing.
+      // The endpoint URL is published while the cluster is still initializing, so
+      // returning on endpoint alone races the immediately-following security-API
+      // calls (FGAC mapping / UI→domain connection), which then hit a cluster that
+      // is not yet serving. Waiting for Processing to clear removes that race.
+      const active = !ds.Processing && !ds.UpgradeProcessing;
+      if (endpoint && active) {
         cfg.opensearchEndpoint = `https://${endpoint}`;
         anim.stop();
         spinner.succeed(`Domain ready: ${cfg.opensearchEndpoint} (${fmtElapsed(Math.round((Date.now() - start) / 1000))})`);
@@ -633,12 +643,15 @@ export async function mapOsiRoleInDomain(cfg) {
   const auth = Buffer.from(`${cfg.opensearchUser || 'admin'}:${masterPass}`).toString('base64');
 
   const { backendRoles: newBackendRoles, users: newUsers } = fgacPrincipals(cfg);
+  const headers = { 'Content-Type': 'application/json', 'Authorization': `Basic ${auth}` };
 
-  try {
-    const headers = { 'Content-Type': 'application/json', 'Authorization': `Basic ${auth}` };
-
-    for (const role of FGAC_ROLES) {
-      const roleUrl = `${url}/${role}`;
+  // Map one role, retrying transient failures. The security plugin can briefly
+  // return 5xx/connection errors right after the cluster becomes active, and a
+  // silent miss here leaves the OSI role unmapped — the pipeline then goes ACTIVE
+  // but can't write. So retry, and treat a persistent failure as fatal.
+  async function mapRole(role) {
+    const roleUrl = `${url}/${role}`;
+    await withRetry(async () => {
       const getResp = await fetch(roleUrl, { headers });
       let existingBackendRoles = [];
       let existingUsers = [];
@@ -646,30 +659,36 @@ export async function mapOsiRoleInDomain(cfg) {
         const data = await getResp.json();
         existingBackendRoles = data?.[role]?.backend_roles || [];
         existingUsers = data?.[role]?.users || [];
+      } else if (getResp.status >= 500) {
+        throw new Error(`security API GET ${role} returned ${getResp.status} (cluster warming up)`);
       }
       const mergedBackendRoles = [...new Set([...existingBackendRoles, ...newBackendRoles])];
       const mergedUsers = [...new Set([...existingUsers, ...newUsers])];
 
       const ops = [{ op: 'add', path: '/backend_roles', value: mergedBackendRoles }];
-      if (newUsers.length) {
-        ops.push({ op: 'add', path: '/users', value: mergedUsers });
-      }
+      if (newUsers.length) ops.push({ op: 'add', path: '/users', value: mergedUsers });
 
-      const resp = await fetch(roleUrl, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(ops),
-      });
-
+      const resp = await fetch(roleUrl, { method: 'PATCH', headers, body: JSON.stringify(ops) });
       if (!resp.ok) {
         const body = await resp.text();
-        printWarning(`FGAC mapping for ${role} returned ${resp.status}: ${body}`);
+        // 5xx and 401/403 right after provisioning are transient; retry. A stable
+        // 4xx (e.g. malformed) would exhaust retries and surface below.
+        throw new Error(`security API PATCH ${role} returned ${resp.status}: ${body}`);
       }
-    }
+    }, {
+      shouldRetry: (e) => isTransientHttpError(e) || /returned (401|403|5\d\d)/.test(e.message),
+      onRetry: (e, i) => printInfo(`FGAC mapping for ${role} not ready yet (attempt ${i + 1}) — retrying`),
+    });
+  }
+
+  try {
+    for (const role of FGAC_ROLES) await mapRole(role);
     printSuccess('Roles mapped to all_access and security_manager in OpenSearch');
   } catch (err) {
-    printWarning(`Could not map roles in FGAC: ${err.message}`);
-    printInfo('You may need to manually map the IAM role in OpenSearch UI → Security → Roles');
+    printError(`Could not map the OSI role in OpenSearch FGAC: ${err.message}`);
+    printInfo('The pipeline cannot write to OpenSearch until this role is mapped.');
+    printInfo('Map it manually in OpenSearch UI → Security → Roles, or re-run the installer.');
+    throw new Error('FGAC role mapping failed — pipeline would not be able to write to OpenSearch');
   }
 }
 
@@ -753,10 +772,20 @@ export async function mapOsiRoleViaOpenSearchUI(cfg) {
 
   const { backendRoles: newBackendRoles, users: newUsers } = fgacPrincipals(cfg);
 
-  try {
-    for (const role of FGAC_ROLES) {
-      const base = `${appEndpoint}/api/v1/configuration/rolesmapping/${role}?dataSourceId=${dsId}`;
+  // A VPC-private domain returns "No Living connections" through the UI until the
+  // UI→domain VPC endpoint connection is live, which lags the data-source object
+  // by a bit. So retry each role until the proxy actually reaches the domain.
+  const looksUnreachable = (data) => /no living connections|data source error|not ready|unavailable/i.test(
+    typeof data === 'string' ? data : JSON.stringify(data || ''),
+  );
+
+  async function mapRoleViaUi(role) {
+    const base = `${appEndpoint}/api/v1/configuration/rolesmapping/${role}?dataSourceId=${dsId}`;
+    await withRetry(async () => {
       const getResp = await osuiSecurityRequest('GET', base);
+      if (getResp.status >= 500 || looksUnreachable(getResp.data)) {
+        throw new Error(`UI security API GET ${role}: ${getResp.status} ${JSON.stringify(getResp.data).slice(0, 160)}`);
+      }
       const cur = (getResp.status === 200 && typeof getResp.data === 'object') ? getResp.data : {};
       const mergedBackendRoles = [...new Set([...(cur.backend_roles || []), ...newBackendRoles])];
       const mergedUsers = [...new Set([...(cur.users || []), ...newUsers])];
@@ -767,14 +796,23 @@ export async function mapOsiRoleViaOpenSearchUI(cfg) {
         hosts: cur.hosts || [],
         users: mergedUsers,
       });
-      if (resp.status !== 200) {
-        printWarning(`FGAC mapping for ${role} returned ${resp.status}: ${JSON.stringify(resp.data).slice(0, 200)}`);
+      if (resp.status !== 200 || looksUnreachable(resp.data)) {
+        throw new Error(`UI security API POST ${role}: ${resp.status} ${JSON.stringify(resp.data).slice(0, 160)}`);
       }
-    }
+    }, {
+      shouldRetry: (e) => isTransientHttpError(e) || looksUnreachable(e.message) || /: (5\d\d|4\d\d) /.test(e.message),
+      onRetry: (e, i) => printInfo(`OpenSearch UI not connected to the VPC domain yet (attempt ${i + 1}) — retrying`),
+    });
+  }
+
+  try {
+    for (const role of FGAC_ROLES) await mapRoleViaUi(role);
     printSuccess('Roles mapped to all_access and security_manager via OpenSearch UI');
   } catch (err) {
-    printWarning(`Could not map roles via OpenSearch UI: ${err.message}`);
-    printInfo('Map the OSI role manually in OpenSearch UI → Security → Roles.');
+    printError(`Could not map the OSI role via OpenSearch UI: ${err.message}`);
+    printInfo('The pipeline cannot write to the VPC-private domain until this role is mapped.');
+    printInfo('Map the OSI role manually in OpenSearch UI → Security → Roles, or re-run the installer.');
+    throw new Error('FGAC role mapping via OpenSearch UI failed — pipeline would not be able to write to OpenSearch');
   }
 }
 
@@ -973,15 +1011,24 @@ export async function createOsiPipeline(cfg, pipelineYaml) {
         },
       } : {};
 
-      await client.send(new CreatePipelineCommand({
-        PipelineName: cfg.pipelineName,
-        MinUnits: cfg.minOcu,
-        MaxUnits: cfg.maxOcu,
-        PipelineConfigurationBody: pipelineYaml,
-        PipelineRoleArn: cfg.iamRoleArn,
-        ...vpcOptions,
-        Tags: stackTags(cfg.pipelineName),
-      }));
+      // OSIS validates the pipeline role's assume-role trust synchronously. When
+      // the role was just created, IAM may not have propagated yet, so retry on
+      // role-not-found / cannot-assume errors instead of failing the whole run.
+      await withRetry(
+        () => client.send(new CreatePipelineCommand({
+          PipelineName: cfg.pipelineName,
+          MinUnits: cfg.minOcu,
+          MaxUnits: cfg.maxOcu,
+          PipelineConfigurationBody: pipelineYaml,
+          PipelineRoleArn: cfg.iamRoleArn,
+          ...vpcOptions,
+          Tags: stackTags(cfg.pipelineName),
+        })),
+        {
+          shouldRetry: isRoleNotPropagatedError,
+          onRetry: (e, i) => printInfo(`Pipeline role not propagated yet (attempt ${i + 1}) — retrying`),
+        },
+      );
       printSuccess(`Pipeline '${cfg.pipelineName}' creation initiated${inVpc ? ` (VPC-attached)` : ''}`);
     } catch (err) {
       printError('Failed to create OSI pipeline');
@@ -1160,16 +1207,24 @@ export async function createConnectedDataSource(cfg) {
   const workspaceArn = `arn:aws:aps:${cfg.region}:${cfg.accountId}:workspace/${cfg.apsWorkspaceId}`;
 
   try {
-    const result = await client.send(new AddDirectQueryDataSourceCommand({
-      DataSourceName: dataSourceName,
-      DataSourceType: {
-        Prometheus: {
-          RoleArn: cfg.connectedDataSourceRoleArn,
-          WorkspaceArn: workspaceArn,
+    // The direct-query data source assumes connectedDataSourceRoleArn, which may
+    // have just been created; retry while IAM propagation catches up.
+    const result = await withRetry(
+      () => client.send(new AddDirectQueryDataSourceCommand({
+        DataSourceName: dataSourceName,
+        DataSourceType: {
+          Prometheus: {
+            RoleArn: cfg.connectedDataSourceRoleArn,
+            WorkspaceArn: workspaceArn,
+          },
         },
+        Description: `Prometheus data source for ${cfg.pipelineName} observability stack`,
+      })),
+      {
+        shouldRetry: isRoleNotPropagatedError,
+        onRetry: (e, i) => printInfo(`Connected Data Source role not propagated yet (attempt ${i + 1}) — retrying`),
       },
-      Description: `Prometheus data source for ${cfg.pipelineName} observability stack`,
-    }));
+    );
     cfg.connectedDataSourceArn = result.DataSourceArn;
     printSuccess(`Connected Data Source created: ${cfg.connectedDataSourceArn}`);
     await tagResource(cfg.region, cfg.connectedDataSourceArn, cfg.pipelineName);
@@ -1259,15 +1314,31 @@ export async function createOpenSearchApplication(cfg) {
 }
 
 /**
- * Fetch the application endpoint via GetApplicationCommand.
+ * Fetch the application endpoint via GetApplicationCommand, waiting for the app
+ * to reach ACTIVE with a populated endpoint. CreateApplication returns before the
+ * endpoint is provisioned, so a single read races an empty value — which would
+ * skip FGAC role mapping and UI setup for VPC domains. Poll until it appears.
  */
 async function fetchAppEndpoint(client, cfg) {
   if (!cfg.appId) return;
-  try {
-    const resp = await client.send(new GetApplicationCommand({ id: cfg.appId }));
-    cfg.appEndpoint = resp.endpoint || '';
-    // endpoint logged by setupDashboards
-  } catch { /* best effort */ }
+  const maxWait = 300_000; // 5 min
+  const interval = 5_000;
+  const start = Date.now();
+  while (Date.now() - start < maxWait) {
+    try {
+      const resp = await client.send(new GetApplicationCommand({ id: cfg.appId }));
+      if (resp.endpoint) {
+        cfg.appEndpoint = resp.endpoint;
+        return; // endpoint logged by setupDashboards
+      }
+      if (resp.status && !['CREATING', 'UPDATING', 'ACTIVE'].includes(resp.status)) {
+        printWarning(`OpenSearch Application status is ${resp.status} — endpoint may not become available`);
+        return;
+      }
+    } catch { /* keep polling */ }
+    await sleep(interval);
+  }
+  printWarning('Timed out waiting for the OpenSearch Application endpoint');
 }
 
 /**
@@ -1782,6 +1853,54 @@ export async function describeResource(region, resource) {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Retry an async operation on transient failures with exponential backoff.
+ * `shouldRetry(err)` decides whether an error is worth retrying (default: any).
+ * Returns the operation's result, or rethrows the last error once `attempts`
+ * is exhausted. `onRetry(err, attempt)` runs between tries for progress output.
+ */
+async function withRetry(fn, { attempts = 6, delayMs = 5000, backoff = 1.6, maxDelayMs = 30_000, shouldRetry = () => true, onRetry } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn(i);
+    } catch (err) {
+      lastErr = err;
+      if (i === attempts - 1 || !shouldRetry(err)) throw err;
+      if (onRetry) onRetry(err, i);
+      await sleep(Math.min(maxDelayMs, Math.round(delayMs * backoff ** i)));
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * True when an error is a freshly-created IAM role that hasn't propagated yet.
+ * OSIS/OpenSearch validate assume-role synchronously and reject with these
+ * shapes until the role and its trust policy are globally consistent.
+ */
+function isRoleNotPropagatedError(err) {
+  const msg = err?.message || '';
+  const name = err?.name || '';
+  return (
+    /cannot be assumed|not authorized to perform: sts:AssumeRole|unable to assume|does not have permission to assume|role .*(does not exist|not found)|Invalid .*RoleArn|no such entity/i.test(msg) ||
+    name === 'ValidationException' && /role/i.test(msg)
+  );
+}
+
+/**
+ * True when an HTTP/network error against a just-provisioned OpenSearch domain
+ * or the managed UI proxy is transient (cluster still warming up, VPC endpoint
+ * connection not yet live). These clear on their own within a minute or two.
+ */
+function isTransientHttpError(err) {
+  const msg = err?.message || String(err || '');
+  return /ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket hang up|network|fetch failed|terminated|502|503|504|timeout/i.test(msg);
+}
+
+// Exported for unit tests.
+export { withRetry as _withRetry, isRoleNotPropagatedError as _isRoleNotPropagatedError, isTransientHttpError as _isTransientHttpError };
 
 function fmtElapsed(totalSec) {
   if (totalSec < 60) return `${totalSec}s`;
