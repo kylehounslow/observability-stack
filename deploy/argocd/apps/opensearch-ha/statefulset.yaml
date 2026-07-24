@@ -5,8 +5,11 @@
 # OpenSearch do the rest):
 #   - replicas: 2 with persistent volumes, so each node keeps its identity and
 #     cluster state across a restart (no term-0 re-election deadlock).
-#   - default OrderedReady pod management, so the controller rolls one pod at a
-#     time and waits for it to become Ready before touching the next.
+#   - RollingUpdate always replaces pods one ordinal at a time and waits for
+#     each to become Ready before the next, regardless of podManagementPolicy.
+#     podManagementPolicy: Parallel only affects initial bring-up and scaling,
+#     not the rolling update; it is set here so a 2-node cluster can form its
+#     manager quorum on first boot without an ordered-start deadlock.
 #   - a client Service that routes only to Ready pods, so the surviving node
 #     serves traffic while its peer restarts.
 #   - a PodDisruptionBudget that keeps at least one node available.

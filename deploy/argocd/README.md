@@ -42,6 +42,19 @@ export KUBECONFIG=...            # target cluster
 ./install.sh
 ```
 
+`install.sh` installs Argo CD, the AppProjects, and the ApplicationSet. It does
+not deploy the OpenTelemetry Collector: the values point trace export at
+`otel-collector.observability.svc.cluster.local:4317`, which is the stack's own
+collector. `observability/collector-argocd.yaml` is a receiver/pipeline
+fragment to merge into that collector (or run as a sidecar); until a collector
+exists at that address, trace export is a no-op and the rest of the install is
+unaffected.
+
+The `otlp.insecure` / `server.insecure` flags in `install/values.yaml` and the
+`tls.insecure` in the collector fragment are for an in-cluster playground.
+Production must set these false: Argo CD server behind TLS/ingress, and OTLP
+over mTLS or in-mesh.
+
 ## Findings
 
 See `SPIKE-FINDINGS.md` in this directory for the measured results and the

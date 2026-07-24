@@ -6,12 +6,20 @@
 # in the argocd namespace.
 #
 # Signal coverage:
-#   metrics - Prometheus receiver scrapes the five Argo CD metrics endpoints.
+#   metrics - Prometheus receiver scrapes the Argo CD metrics endpoints
+#             (application-controller, server, repo-server,
+#             applicationset-controller, notifications-controller).
 #   traces  - OTLP receiver accepts spans the application-controller and
-#             repo-server export (enabled via controller.otlp.address /
-#             reposerver.otlp.address in the install values).
+#             repo-server export (enabled via the shared otlp.address param in
+#             the install values).
 #   logs    - filelog receiver tails the argocd pod logs; components emit JSON
 #             (global.logging.format=json) so no regex parsing is needed.
+#
+# The metrics service names below assume the chart is installed with release
+# name `argocd` (as install.sh does): because "argocd" does not contain the
+# chart name "argo-cd", the fullname helper short-circuits to `argocd-*`, so
+# the services are argocd-application-controller-metrics, etc. If installed
+# under a different release name, adjust the keep regex accordingly.
 receivers:
   prometheus/argocd:
     config:
@@ -23,9 +31,10 @@ receivers:
               namespaces:
                 names: [argocd]
           relabel_configs:
-            # Keep only the Argo CD metrics services.
+            # Keep only the Argo CD metrics services (verified against a live
+            # release-name-`argocd` install).
             - source_labels: [__meta_kubernetes_service_name]
-              regex: "argocd-(metrics|server-metrics|repo-server|applicationset-controller|notifications-controller-metrics|redis)"
+              regex: "argocd-(application-controller|server|repo-server|applicationset-controller|notifications-controller)-metrics"
               action: keep
             - source_labels: [__meta_kubernetes_namespace]
               target_label: namespace

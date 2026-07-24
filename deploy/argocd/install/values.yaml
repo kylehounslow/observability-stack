@@ -17,12 +17,10 @@ global:
   logging:
     format: json
     level: info
-  # Sample every Argo CD component into the collector over OTLP gRPC.
-  # otlp-address is consumed by the application-controller and repo-server.
-  env:
-    - name: OTEL_EXPORTER_OTLP_ENDPOINT
-      value: "http://otel-collector.observability.svc.cluster.local:4317"
 
+# OTLP trace export is driven by the --otlp-address flag (set via
+# configs.params.otlp.address below), not by the OTEL SDK env var
+# OTEL_EXPORTER_OTLP_ENDPOINT, so no global.env entry is needed.
 configs:
   params:
     # OTLP trace export. The application-controller, repo-server, and server all

@@ -19,14 +19,21 @@ spec:
   generators:
     - list:
         elements:
+          # targetRevision is per-environment: staging tracks the branch head
+          # (fast feedback on every merge), production pins an immutable tag so
+          # a promotion targets a specific tested revision independent of what
+          # the branch has moved to since. Replace the placeholder tag with the
+          # release tag being promoted.
           - env: staging
             namespace: obs-staging
             project: playground-staging
             autosync: "true"
+            targetRevision: main
           - env: production
             namespace: obs-prod
             project: playground-production
             autosync: "false"
+            targetRevision: v0.4.0
   template:
     metadata:
       name: "opensearch-{{.env}}"
@@ -36,7 +43,7 @@ spec:
       project: "{{.project}}"
       source:
         repoURL: "https://github.com/kylehounslow/observability-stack.git"
-        targetRevision: spike/argocd-cd
+        targetRevision: "{{.targetRevision}}"
         path: deploy/argocd/apps/opensearch-min
       destination:
         server: "https://kubernetes.default.svc"
