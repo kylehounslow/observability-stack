@@ -1,0 +1,26 @@
+# Staging AppProject.
+#
+# Receives every merge to main. Auto-sync is allowed. The project is scoped so
+# a staging Application can only touch the staging namespace, which keeps a
+# staging sync from mutating production resources even though both share a
+# cluster/account today.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: playground-staging
+  namespace: argocd
+spec:
+  description: observability-stack playground - staging
+  sourceRepos:
+    - "https://github.com/kylehounslow/observability-stack.git"
+    - "https://github.com/opensearch-project/observability-stack.git"
+  destinations:
+    - server: "https://kubernetes.default.svc"
+      namespace: "obs-staging"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  # Staging has no sync-window restriction: it deploys on every merge.

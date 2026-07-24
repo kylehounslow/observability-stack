@@ -1,0 +1,73 @@
+# Minimal OpenSearch used to measure upgrade behaviour under Argo CD.
+#
+# This is a reduced single-node stand-in for the chart's OpenSearch
+# StatefulSet. It carries the two properties that decide upgrade downtime:
+#   - a StatefulSet with a RollingUpdate strategy (default), and
+#   - a readiness probe on the OpenSearch HTTP port.
+# Argo CD's job is to reconcile the image tag change; the StatefulSet
+# controller does the rolling replacement. The question the test answers is
+# whether that in-place image bump is graceful.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch
+  labels:
+    app: opensearch
+spec:
+  clusterIP: None
+  selector:
+    app: opensearch
+  ports:
+    - name: http
+      port: 9200
+      targetPort: 9200
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch
+  labels:
+    app: opensearch
+spec:
+  serviceName: opensearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opensearch
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: opensearch
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:3.7.0
+          env:
+            - name: discovery.type
+              value: single-node
+            - name: DISABLE_INSTALL_DEMO_CONFIG
+              value: "true"
+            - name: DISABLE_SECURITY_PLUGIN
+              value: "true"
+            - name: OPENSEARCH_JAVA_OPTS
+              value: "-Xms512m -Xmx512m"
+          ports:
+            - name: http
+              containerPort: 9200
+          readinessProbe:
+            httpGet:
+              path: /_cluster/health
+              port: 9200
+            initialDelaySeconds: 20
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 1500Mi

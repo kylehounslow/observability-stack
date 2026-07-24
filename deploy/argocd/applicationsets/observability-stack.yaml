@@ -1,0 +1,59 @@
+# ApplicationSet that generates one Application per environment from a single
+# template. This is how one git repo drives both staging and production while
+# keeping their sync policies different:
+#   - staging: automated sync (self-heal + prune) on every commit.
+#   - production: manual sync only, in the gated project. The generator sets
+#     autosync=false for prod so the promotion is an explicit manual sync.
+#
+# The environments differ only in the list-generator elements below, so adding
+# an environment is a one-line change and drift between environments is
+# structurally impossible.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: observability-stack
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - env: staging
+            namespace: obs-staging
+            project: playground-staging
+            autosync: "true"
+          - env: production
+            namespace: obs-prod
+            project: playground-production
+            autosync: "false"
+  template:
+    metadata:
+      name: "opensearch-{{.env}}"
+      labels:
+        env: "{{.env}}"
+    spec:
+      project: "{{.project}}"
+      source:
+        repoURL: "https://github.com/kylehounslow/observability-stack.git"
+        targetRevision: spike/argocd-cd
+        path: deploy/argocd/apps/opensearch-min
+      destination:
+        server: "https://kubernetes.default.svc"
+        namespace: "{{.namespace}}"
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+  # Per-environment sync policy is applied via a template patch: staging gets
+  # an automated policy, production does not (manual sync only, enforced by the
+  # production AppProject's deny window).
+  templatePatch: |
+    spec:
+      syncPolicy:
+        {{- if eq .autosync "true" }}
+        automated:
+          prune: true
+          selfHeal: true
+        {{- end }}
+        syncOptions:
+          - CreateNamespace=true

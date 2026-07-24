@@ -1,0 +1,85 @@
+# OpenTelemetry Collector configuration fragment for Argo CD self-monitoring.
+#
+# This is the receiver/pipeline set that lands Argo CD's own signals in the
+# observability-stack. It is written as a standalone collector config so it can
+# be merged into the stack's existing collector, or run as a sidecar collector
+# in the argocd namespace.
+#
+# Signal coverage:
+#   metrics - Prometheus receiver scrapes the five Argo CD metrics endpoints.
+#   traces  - OTLP receiver accepts spans the application-controller and
+#             repo-server export (enabled via controller.otlp.address /
+#             reposerver.otlp.address in the install values).
+#   logs    - filelog receiver tails the argocd pod logs; components emit JSON
+#             (global.logging.format=json) so no regex parsing is needed.
+receivers:
+  prometheus/argocd:
+    config:
+      scrape_configs:
+        - job_name: argocd-metrics
+          scrape_interval: 15s
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names: [argocd]
+          relabel_configs:
+            # Keep only the Argo CD metrics services.
+            - source_labels: [__meta_kubernetes_service_name]
+              regex: "argocd-(metrics|server-metrics|repo-server|applicationset-controller|notifications-controller-metrics|redis)"
+              action: keep
+            - source_labels: [__meta_kubernetes_namespace]
+              target_label: namespace
+            - source_labels: [__meta_kubernetes_service_name]
+              target_label: service
+
+  otlp/argocd:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+  filelog/argocd:
+    include:
+      - /var/log/pods/argocd_*/*/*.log
+    include_file_path: true
+    operators:
+      - type: container
+      - type: json_parser
+        parse_from: body
+        on_error: send_quiet
+
+processors:
+  batch: {}
+  resource/argocd:
+    attributes:
+      - key: service.namespace
+        value: argocd
+        action: upsert
+      - key: deployment.environment
+        from_attribute: env
+        action: upsert
+
+exporters:
+  # In the playground these route to Data Prepper / OpenSearch, matching the
+  # existing collector export path. Endpoints are placeholders here.
+  otlp/data-prepper-traces:
+    endpoint: data-prepper:21890
+    tls:
+      insecure: true
+  # Metrics and logs follow the stack's existing exporter wiring.
+  debug:
+    verbosity: normal
+
+service:
+  pipelines:
+    metrics/argocd:
+      receivers: [prometheus/argocd]
+      processors: [resource/argocd, batch]
+      exporters: [debug]
+    traces/argocd:
+      receivers: [otlp/argocd]
+      processors: [resource/argocd, batch]
+      exporters: [otlp/data-prepper-traces]
+    logs/argocd:
+      receivers: [filelog/argocd]
+      processors: [resource/argocd, batch]
+      exporters: [debug]

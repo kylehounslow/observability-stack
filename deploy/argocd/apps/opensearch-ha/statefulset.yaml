@@ -1,0 +1,90 @@
+# Two-node OpenSearch that demonstrates a zero-downtime rolling image upgrade.
+#
+# The properties that make the upgrade graceful, none of which are ArgoCD
+# specific (ArgoCD only applies the manifest; the StatefulSet controller and
+# OpenSearch do the rest):
+#   - replicas: 2 with persistent volumes, so each node keeps its identity and
+#     cluster state across a restart (no term-0 re-election deadlock).
+#   - default OrderedReady pod management, so the controller rolls one pod at a
+#     time and waits for it to become Ready before touching the next.
+#   - a client Service that routes only to Ready pods, so the surviving node
+#     serves traffic while its peer restarts.
+#   - a PodDisruptionBudget that keeps at least one node available.
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch
+  labels: { app: opensearch-ha }
+spec:
+  selector: { app: opensearch-ha }
+  ports: [{ name: http, port: 9200, targetPort: 9200 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opensearch-headless
+  labels: { app: opensearch-ha }
+spec:
+  clusterIP: None
+  selector: { app: opensearch-ha }
+  publishNotReadyAddresses: true
+  ports:
+    - { name: http, port: 9200, targetPort: 9200 }
+    - { name: transport, port: 9300, targetPort: 9300 }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: opensearch }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: opensearch-ha } }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: opensearch
+  labels: { app: opensearch-ha }
+spec:
+  serviceName: opensearch-headless
+  podManagementPolicy: Parallel
+  replicas: 2
+  selector: { matchLabels: { app: opensearch-ha } }
+  updateStrategy: { type: RollingUpdate }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 2Gi } }
+  template:
+    metadata: { labels: { app: opensearch-ha } }
+    spec:
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: fix-perms
+          image: busybox:1.36
+          command: ["sh","-c","chown -R 1000:1000 /usr/share/opensearch/data"]
+          volumeMounts: [{ name: data, mountPath: /usr/share/opensearch/data }]
+      containers:
+        - name: opensearch
+          image: opensearchproject/opensearch:3.7.0
+          env:
+            - { name: cluster.name, value: spike }
+            - { name: node.name, valueFrom: { fieldRef: { fieldPath: metadata.name } } }
+            - { name: discovery.seed_hosts, value: "opensearch-0.opensearch-headless,opensearch-1.opensearch-headless" }
+            - { name: cluster.initial_cluster_manager_nodes, value: "opensearch-0,opensearch-1" }
+            - { name: DISABLE_INSTALL_DEMO_CONFIG, value: "true" }
+            - { name: DISABLE_SECURITY_PLUGIN, value: "true" }
+            - { name: OPENSEARCH_JAVA_OPTS, value: "-Xms512m -Xmx512m" }
+          ports:
+            - { name: http, containerPort: 9200 }
+            - { name: transport, containerPort: 9300 }
+          readinessProbe:
+            httpGet: { path: /_cluster/health, port: 9200 }
+            initialDelaySeconds: 20
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts: [{ name: data, mountPath: /usr/share/opensearch/data }]
+          resources:
+            requests: { cpu: 250m, memory: 768Mi }
+            limits: { memory: 1500Mi }

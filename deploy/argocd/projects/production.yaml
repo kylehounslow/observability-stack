@@ -1,0 +1,47 @@
+# Production AppProject.
+#
+# Isolation and gating are enforced here, not in the Application:
+#   - destinations restrict production Applications to the obs-prod namespace.
+#   - roles + a token-scoped RBAC policy mean only the promotion identity can
+#     sync production; a staging run or a developer cannot.
+#   - a sync window denies automated sync by default. Promotion happens through
+#     a manual sync by the promotion role inside (or regardless of) the window,
+#     so production never auto-deploys from a git change alone.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: playground-production
+  namespace: argocd
+spec:
+  description: observability-stack playground - production
+  sourceRepos:
+    - "https://github.com/kylehounslow/observability-stack.git"
+    - "https://github.com/opensearch-project/observability-stack.git"
+  destinations:
+    - server: "https://kubernetes.default.svc"
+      namespace: "obs-prod"
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  # Deny all automated sync; allow only manual, so a git change never
+  # auto-promotes to production. manualSync: true lets an authorized manual
+  # sync proceed. This is the gate.
+  syncWindows:
+    - kind: deny
+      schedule: "* * * * *"
+      duration: 24h
+      applications:
+        - "*"
+      manualSync: true
+  # Only the promotion role may act on production Applications.
+  roles:
+    - name: promoter
+      description: identity permitted to sync production
+      policies:
+        - "p, proj:playground-production:promoter, applications, sync, playground-production/*, allow"
+        - "p, proj:playground-production:promoter, applications, get, playground-production/*, allow"
+      groups:
+        - observability-stack-maintainers

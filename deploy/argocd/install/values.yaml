@@ -1,0 +1,70 @@
+# Argo CD install values for the observability-stack playground.
+#
+# Self-monitoring is wired to the stack's own OpenTelemetry Collector:
+#   - Every component exposes a Prometheus /metrics endpoint and a ServiceMonitor
+#     so the collector's Prometheus receiver scrapes controller, repo-server,
+#     applicationset-controller, server, and notifications metrics.
+#   - Logs are emitted as JSON so the collector's filelog receiver parses them
+#     without a regex.
+#   - The application-controller and repo-server export OTLP traces to the
+#     collector's OTLP gRPC endpoint.
+#
+# The OTLP endpoint is templated per environment; the value below points at the
+# in-cluster collector service the stack already ships.
+
+global:
+  # JSON logs so the filelog receiver ingests structured fields, not free text.
+  logging:
+    format: json
+    level: info
+  # Sample every Argo CD component into the collector over OTLP gRPC.
+  # otlp-address is consumed by the application-controller and repo-server.
+  env:
+    - name: OTEL_EXPORTER_OTLP_ENDPOINT
+      value: "http://otel-collector.observability.svc.cluster.local:4317"
+
+configs:
+  params:
+    # OTLP trace export. The application-controller, repo-server, and server all
+    # read the shared `otlp.address` / `otlp.insecure` keys of
+    # argocd-cmd-params-cm (verified in Argo CD v3.4.5: the per-component env
+    # vars ARGOCD_*_OTLP_ADDRESS resolve from these keys, not from
+    # controller.otlp.* / reposerver.otlp.*).
+    otlp.address: "otel-collector.observability.svc.cluster.local:4317"
+    otlp.insecure: "true"
+    server.insecure: "true"
+
+# Prometheus metrics on every component. ServiceMonitors are disabled here
+# because the playground scrapes via the collector's Prometheus receiver
+# (static scrape config), not the Prometheus Operator. Flip to true if the
+# Operator is present.
+controller:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+repoServer:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+server:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+applicationSet:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+notifications:
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: false
+
+# Redis is fine at defaults for a playground. HA is a follow-up if Argo CD
+# itself needs production availability guarantees.
+redis-ha:
+  enabled: false
