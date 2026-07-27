@@ -18,13 +18,8 @@ The CLI (`aws/cli-installer`, published to npm as `@opensearch-project/observabi
 
 ## Cutting a release
 
-1. Open a PR that sets `aws/cli-installer/package.json` to the target version (e.g. `0.2.0-beta.1`). Sign commits for DCO (`git commit -s`). Get a maintainer review and merge to `main`.
-2. Tag the merged commit and push it:
-   ```
-   git tag v0.2.0-beta.1 <sha>
-   git push upstream v0.2.0-beta.1
-   ```
-   The tag is the release trigger. Merging alone publishes nothing.
+1. Open a PR that sets `aws/cli-installer/package.json` to the target version (e.g. `0.3.0`). Sign commits for DCO (`git commit -s`). Get a maintainer review and merge to `main`.
+2. Request the release tag by filing a `[GitHub Request]` issue on [opensearch-project/.github](https://github.com/opensearch-project/.github/issues). Maintainers cannot push tags to this repo directly ([.github#531](https://github.com/opensearch-project/.github/issues/531)), so the admins create the tag on your behalf. Give the merged commit SHA and the tag name (`v0.3.0`). See [.github#577](https://github.com/opensearch-project/.github/issues/577) for the exact format. The tag is the release trigger; merging alone publishes nothing.
 3. The `release-to-npm` job pauses on the `release-approval` environment. A required reviewer, who cannot be the release author, opens the workflow run and approves the deployment.
 4. On approval, the workflow validates the version, runs tests, publishes the CLI to the correct npm dist-tag, and drafts the GitHub release. Fill in the release notes with the component-version matrix from `.env`.
 
