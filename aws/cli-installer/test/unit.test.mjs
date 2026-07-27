@@ -452,6 +452,10 @@ import {
   fgacPrincipals,
   validateVpcTopology,
   pipelineRoleArnError,
+  permissionsAllowPort,
+  permissionsAllowInternet,
+  analyzeSecurityGroupRules,
+  checkSecurityGroupRules,
   _withRetry,
   _isRoleNotPropagatedError,
   _isTransientHttpError,
@@ -600,6 +604,163 @@ describe('validateVpcTopology', () => {
     });
     assert.ok(errors.some((e) => /both in us-east-1a/.test(e)));
     assert.ok(errors.some((e) => /Security group sg-1 belongs to VPC vpc-other/.test(e)));
+  });
+});
+
+// ── Security-group rule analysis (best-effort data-path check) ────────────────
+
+describe('permissionsAllowPort', () => {
+  const opts = { selfIds: ['sg-1'], vpcCidrs: ['172.30.0.0/16'] };
+
+  it('matches a tcp/443 range from a self-referencing group', () => {
+    const perms = [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }], IpRanges: [] }];
+    assert.equal(permissionsAllowPort(perms, 443, opts), true);
+  });
+
+  it('matches all-protocols (-1) regardless of port fields', () => {
+    const perms = [{ IpProtocol: '-1', UserIdGroupPairs: [{ GroupId: 'sg-1' }], IpRanges: [] }];
+    assert.equal(permissionsAllowPort(perms, 443, opts), true);
+  });
+
+  it('matches a 0.0.0.0/0 CIDR range covering the port', () => {
+    const perms = [{ IpProtocol: 'tcp', FromPort: 0, ToPort: 65535, UserIdGroupPairs: [], IpRanges: [{ CidrIp: '0.0.0.0/0' }] }];
+    assert.equal(permissionsAllowPort(perms, 443, opts), true);
+  });
+
+  it('matches the VPC CIDR', () => {
+    const perms = [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '172.30.0.0/16' }] }];
+    assert.equal(permissionsAllowPort(perms, 443, opts), true);
+  });
+
+  it('does not match a foreign group or a narrower CIDR', () => {
+    const perms = [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-other' }], IpRanges: [{ CidrIp: '10.0.0.5/32' }] }];
+    assert.equal(permissionsAllowPort(perms, 443, opts), false);
+  });
+
+  it('does not match a rule whose port range excludes 443', () => {
+    const perms = [{ IpProtocol: 'tcp', FromPort: 80, ToPort: 80, IpRanges: [{ CidrIp: '0.0.0.0/0' }] }];
+    assert.equal(permissionsAllowPort(perms, 443, opts), false);
+  });
+});
+
+describe('permissionsAllowInternet', () => {
+  it('matches only a 0.0.0.0/0 range, not a self-ref or VPC CIDR', () => {
+    assert.equal(permissionsAllowInternet([{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '0.0.0.0/0' }] }], 443), true);
+    assert.equal(permissionsAllowInternet([{ IpProtocol: '-1', IpRanges: [{ CidrIp: '0.0.0.0/0' }] }], 443), true);
+    assert.equal(permissionsAllowInternet([{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }], 443), false);
+    assert.equal(permissionsAllowInternet([{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '172.30.0.0/16' }] }], 443), false);
+  });
+});
+
+describe('analyzeSecurityGroupRules', () => {
+  const vpcCidrs = ['172.30.0.0/16'];
+
+  it('no warnings for a demo when egress allows internet and 443 is open in-VPC', () => {
+    const groups = [{
+      GroupId: 'sg-1',
+      IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }],
+      IpPermissionsEgress: [{ IpProtocol: '-1', IpRanges: [{ CidrIp: '0.0.0.0/0' }] }],
+    }];
+    assert.deepEqual(analyzeSecurityGroupRules(groups, { groupIds: ['sg-1'], vpcCidrs, demo: true }), []);
+  });
+
+  it('warns about both intra-VPC and internet egress when egress is stripped (demo)', () => {
+    // The SA's failure: default allow-all egress removed, so the demo can't reach
+    // OSIS in-VPC OR bootstrap over the internet.
+    const groups = [{
+      GroupId: 'sg-1',
+      IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }],
+      IpPermissionsEgress: [],
+    }];
+    const w = analyzeSecurityGroupRules(groups, { groupIds: ['sg-1'], vpcCidrs, demo: true });
+    assert.equal(w.length, 2);
+    assert.ok(w.some((x) => /within the VPC/i.test(x)));
+    assert.ok(w.some((x) => /0\.0\.0\.0\/0/.test(x) && /internet/i.test(x)));
+  });
+
+  it('flags missing internet egress even when in-VPC egress is present (demo)', () => {
+    // Egress scoped to the VPC CIDR: telemetry to OSIS works, but the demo cannot
+    // pull images. This is the case the earlier version wrongly passed.
+    const groups = [{
+      GroupId: 'sg-1',
+      IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }],
+      IpPermissionsEgress: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '172.30.0.0/16' }] }],
+    }];
+    const w = analyzeSecurityGroupRules(groups, { groupIds: ['sg-1'], vpcCidrs, demo: true });
+    assert.equal(w.length, 1);
+    assert.ok(/internet/i.test(w[0]) && /0\.0\.0\.0\/0/.test(w[0]));
+  });
+
+  it('does NOT require internet egress when no demo launches (--skip-demo)', () => {
+    // No demo: only OSIS→domain in-VPC egress is needed. VPC-scoped egress suffices.
+    const groups = [{
+      GroupId: 'sg-1',
+      IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }],
+      IpPermissionsEgress: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '172.30.0.0/16' }] }],
+    }];
+    assert.deepEqual(analyzeSecurityGroupRules(groups, { groupIds: ['sg-1'], vpcCidrs, demo: false }), []);
+  });
+
+  it('warns about missing intra-VPC ingress on 443', () => {
+    const groups = [{
+      GroupId: 'sg-1',
+      IpPermissions: [{ IpProtocol: 'tcp', FromPort: 22, ToPort: 22, IpRanges: [{ CidrIp: '0.0.0.0/0' }] }],
+      IpPermissionsEgress: [{ IpProtocol: '-1', IpRanges: [{ CidrIp: '0.0.0.0/0' }] }],
+    }];
+    const w = analyzeSecurityGroupRules(groups, { groupIds: ['sg-1'], vpcCidrs, demo: true });
+    assert.equal(w.length, 1);
+    assert.ok(/ingress.*443/i.test(w[0]));
+  });
+
+  it('is satisfied when the union across multiple groups covers ingress and egress', () => {
+    const groups = [
+      { GroupId: 'sg-in', IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-in' }] }], IpPermissionsEgress: [] },
+      { GroupId: 'sg-out', IpPermissions: [], IpPermissionsEgress: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '0.0.0.0/0' }] }] },
+    ];
+    assert.deepEqual(analyzeSecurityGroupRules(groups, { groupIds: ['sg-in', 'sg-out'], vpcCidrs, demo: true }), []);
+  });
+});
+
+describe('checkSecurityGroupRules', () => {
+  const cfg = { region: 'us-east-1', vpcId: 'vpc-aaa', securityGroupIds: ['sg-1'] };
+
+  it('returns [] when no VPC is configured', async () => {
+    assert.deepEqual(await checkSecurityGroupRules({ region: 'us-east-1', vpcId: '', securityGroupIds: [] }), []);
+  });
+
+  it('degrades to a single manual-verify warning when describe is unauthorized', async () => {
+    const w = await checkSecurityGroupRules(cfg, {
+      describeSecurityGroups: async () => { const e = new Error('UnauthorizedOperation'); e.name = 'UnauthorizedOperation'; throw e; },
+      describeVpcs: async () => [{ VpcId: 'vpc-aaa', CidrBlock: '172.30.0.0/16' }],
+    });
+    assert.equal(w.length, 1);
+    assert.ok(/lacks ec2:DescribeSecurityGroups/.test(w[0]));
+  });
+
+  it('flags a stripped egress rule end-to-end (demo default)', async () => {
+    const w = await checkSecurityGroupRules(cfg, {
+      describeSecurityGroups: async () => [{
+        GroupId: 'sg-1',
+        IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }],
+        IpPermissionsEgress: [],
+      }],
+      describeVpcs: async () => [{ VpcId: 'vpc-aaa', CidrBlockAssociationSet: [{ CidrBlock: '172.30.0.0/16' }] }],
+    });
+    // demo defaults on (skipDemo unset): both in-VPC and internet egress missing.
+    assert.equal(w.length, 2);
+    assert.ok(w.some((x) => /internet/i.test(x)));
+  });
+
+  it('does not flag internet egress when skipDemo is set', async () => {
+    const w = await checkSecurityGroupRules({ ...cfg, skipDemo: true }, {
+      describeSecurityGroups: async () => [{
+        GroupId: 'sg-1',
+        IpPermissions: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, UserIdGroupPairs: [{ GroupId: 'sg-1' }] }],
+        IpPermissionsEgress: [{ IpProtocol: 'tcp', FromPort: 443, ToPort: 443, IpRanges: [{ CidrIp: '172.30.0.0/16' }] }],
+      }],
+      describeVpcs: async () => [{ VpcId: 'vpc-aaa', CidrBlockAssociationSet: [{ CidrBlock: '172.30.0.0/16' }] }],
+    });
+    assert.deepEqual(w, []);
   });
 });
 

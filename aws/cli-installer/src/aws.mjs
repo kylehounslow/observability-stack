@@ -1718,6 +1718,162 @@ export async function validateVpcTopology(cfg, deps = {}) {
   return errors;
 }
 
+// ── Security-group rule analysis (best-effort data-path check) ───────────────
+
+/**
+ * Does a permission entry cover TCP `port`? IpProtocol '-1' means all protocols
+ * and all ports.
+ */
+function permCoversPort(p, port) {
+  const proto = p.IpProtocol;
+  return proto === '-1' || (proto === 'tcp' && (p.FromPort ?? 0) <= port && (p.ToPort ?? 65535) >= port);
+}
+
+/**
+ * Does a set of IpPermissions entries allow TCP `port` from/to an intra-stack
+ * source? A source counts as intra-stack when the rule references one of the
+ * stack's own security groups (`selfIds`) or a CIDR not narrower than the VPC
+ * (0.0.0.0/0, or a VPC-CIDR entry).
+ */
+export function permissionsAllowPort(permissions, port, { selfIds = [], vpcCidrs = [] } = {}) {
+  const selfSet = new Set(selfIds);
+  const cidrOk = (cidr) => cidr === '0.0.0.0/0' || vpcCidrs.includes(cidr);
+  for (const p of permissions || []) {
+    if (!permCoversPort(p, port)) continue;
+    if ((p.UserIdGroupPairs || []).some((g) => selfSet.has(g.GroupId))) return true;
+    if ((p.IpRanges || []).some((r) => cidrOk(r.CidrIp))) return true;
+  }
+  return false;
+}
+
+/**
+ * Does a set of IpPermissions entries allow TCP `port` to the public internet
+ * (a 0.0.0.0/0 IpRanges entry)? A self-referencing SG rule or a VPC-scoped CIDR
+ * does NOT count; those keep traffic inside the VPC. The demo instance needs
+ * this for bootstrap (dnf, GitHub, container registries), which does not route
+ * through the VPC-private OSIS endpoint.
+ */
+export function permissionsAllowInternet(permissions, port) {
+  for (const p of permissions || []) {
+    if (!permCoversPort(p, port)) continue;
+    if ((p.IpRanges || []).some((r) => r.CidrIp === '0.0.0.0/0')) return true;
+  }
+  return false;
+}
+
+/**
+ * Analyze the security groups the stack attaches to the EC2 demo, OSIS pipeline,
+ * and OpenSearch domain, and return WARNING strings for rules that would silently
+ * break the data path. Pure: takes the DescribeSecurityGroups result so it is
+ * unit-testable. Warnings only, never hard-fails: a user's network may route the
+ * same traffic via other groups, a NAT, or NACLs we can't see.
+ *
+ * All three components share `groupIds` (see ec2-demo.mjs / createOsiPipeline /
+ * createOpenSearch). There are two distinct egress needs, only one of which is
+ * intra-VPC:
+ *   - Intra-VPC egress 443 (always): OSIS reaches the domain; with a demo, the
+ *     demo's collector reaches the VPC-private OSIS ingest endpoint. Satisfied by
+ *     a self-reference, a VPC-CIDR rule, or 0.0.0.0/0.
+ *   - Internet egress 443 (only with a demo): the instance bootstraps over the
+ *     public internet (dnf, GitHub clone, container image pulls). This traffic
+ *     does NOT flow through the VPC-private endpoint, so only a 0.0.0.0/0 egress
+ *     rule (to a NAT/IGW) satisfies it; a VPC-CIDR-scoped rule does not.
+ * Plus intra-VPC ingress 443 (always): OSIS accepts OTLP from the demo and the
+ * domain accepts requests from OSIS.
+ *
+ * @param {object[]} groups  DescribeSecurityGroups result
+ * @param {object} opts
+ * @param {string[]} opts.groupIds  the stack's SG ids (self-reference set)
+ * @param {string[]} [opts.vpcCidrs]  the VPC's CIDR block(s)
+ * @param {boolean} [opts.demo=true]  whether an EC2 demo will launch (adds the
+ *   internet-egress requirement); pass false for --skip-demo
+ */
+export function analyzeSecurityGroupRules(groups, { groupIds = [], vpcCidrs = [], demo = true } = {}) {
+  const warnings = [];
+  const ids = groupIds.length ? groupIds : (groups || []).map((g) => g.GroupId);
+  const opts = { selfIds: ids, vpcCidrs };
+  const list = groups || [];
+
+  const intraVpcEgress443 = list.some((g) => permissionsAllowPort(g.IpPermissionsEgress, 443, opts));
+  const internetEgress443 = list.some((g) => permissionsAllowInternet(g.IpPermissionsEgress, 443));
+  const intraVpcIngress443 = list.some((g) => permissionsAllowPort(g.IpPermissions, 443, opts));
+
+  if (!intraVpcEgress443) {
+    warnings.push(
+      `No outbound (egress) rule allowing TCP 443 within the VPC was found on ${ids.join(', ')}. ` +
+      `OSIS cannot reach the OpenSearch domain${demo ? ' and the demo collector cannot reach the OSIS ingest endpoint' : ''}, so no telemetry will appear. ` +
+      `Add an egress rule allowing TCP 443 to these security groups themselves (self-reference), the VPC CIDR, or 0.0.0.0/0.`
+    );
+  }
+  if (demo && !internetEgress443) {
+    warnings.push(
+      `No outbound (egress) rule allowing TCP 443 to the internet (0.0.0.0/0) was found on ${ids.join(', ')}. ` +
+      `The EC2 demo bootstraps over the public internet (package install, GitHub clone, container image pulls); that traffic does not use the VPC-private endpoint, so a VPC-scoped egress rule is not enough. ` +
+      `Add an egress rule allowing TCP 443 to 0.0.0.0/0 (reachable via a NAT gateway for private subnets, or an internet gateway for public ones).`
+    );
+  }
+  if (!intraVpcIngress443) {
+    warnings.push(
+      `No inbound (ingress) rule allowing TCP 443 from within the VPC was found on ${ids.join(', ')}. ` +
+      `OSIS will reject OTLP${demo ? ' from the demo' : ''} and the domain will reject requests from OSIS. ` +
+      `Add an ingress rule allowing TCP 443 from these security groups themselves (self-reference) or from the VPC CIDR.`
+    );
+  }
+  return warnings;
+}
+
+/**
+ * Best-effort check of the stack's security-group rules against the data path.
+ * Returns WARNING strings (never throws, never blocks the run). When the caller
+ * lacks ec2:DescribeSecurityGroups, returns a single warning telling the user to
+ * verify the rules manually, since we can't inspect them.
+ *
+ * @param {object} cfg  resolved config (needs region, vpcId, securityGroupIds)
+ * @param {object} [deps]  optional injected accessors for testing
+ * @returns {Promise<string[]>}
+ */
+export async function checkSecurityGroupRules(cfg, deps = {}) {
+  if (!cfg.vpcId || !(cfg.securityGroupIds || []).length) return [];
+
+  const demo = !cfg.skipDemo;
+
+  const describeSecurityGroups = deps.describeSecurityGroups || (async (region, ids) => {
+    const { EC2Client, DescribeSecurityGroupsCommand } = await import('@aws-sdk/client-ec2');
+    const client = new EC2Client({ region });
+    return (await client.send(new DescribeSecurityGroupsCommand({ GroupIds: ids }))).SecurityGroups || [];
+  });
+  const describeVpcs = deps.describeVpcs || (async (region, ids) => {
+    const { EC2Client, DescribeVpcsCommand } = await import('@aws-sdk/client-ec2');
+    const client = new EC2Client({ region });
+    return (await client.send(new DescribeVpcsCommand({ VpcIds: ids }))).Vpcs || [];
+  });
+
+  const ids = cfg.securityGroupIds;
+  let groups;
+  try {
+    groups = await describeSecurityGroups(cfg.region, ids);
+  } catch (err) {
+    if (/UnauthorizedOperation|AccessDenied|not authorized/i.test(err.message || err.name || '')) {
+      return [
+        `Could not verify security-group rules (the current role lacks ec2:DescribeSecurityGroups). ` +
+        `Ensure ${ids.join(', ')} allow outbound TCP 443 within the VPC (OSIS to domain${demo ? ', demo collector to OSIS ingest' : ''}), ` +
+        `inbound TCP 443 from within the VPC (OSIS from ${demo ? 'demo, ' : ''}domain from OSIS)` +
+        `${demo ? ', and outbound TCP 443 to 0.0.0.0/0 for the demo to bootstrap over the internet' : ''}, or telemetry will not appear.`,
+      ];
+    }
+    return [`Could not verify security-group rules: ${err.message}`];
+  }
+
+  let vpcCidrs = [];
+  try {
+    const vpcs = await describeVpcs(cfg.region, [cfg.vpcId]);
+    vpcCidrs = (vpcs[0]?.CidrBlockAssociationSet || []).map((a) => a.CidrBlock).filter(Boolean);
+    if (!vpcCidrs.length && vpcs[0]?.CidrBlock) vpcCidrs = [vpcs[0].CidrBlock];
+  } catch { /* VPC CIDR is a refinement; self-reference checks still work without it */ }
+
+  return analyzeSecurityGroupRules(groups, { groupIds: ids, vpcCidrs, demo });
+}
+
 // ── Pipeline listing / describe / update ─────────────────────────────────────
 
 /**

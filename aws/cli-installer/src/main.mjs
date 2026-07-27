@@ -15,11 +15,13 @@ import {
   createConnectedDataSource,
   createOpenSearchApplication,
   validateVpcTopology,
+  checkSecurityGroupRules,
 } from './aws.mjs';
 import {
   printError,
   printSuccess,
   printStep,
+  printWarning,
   printPanel,
   printBox,
   STAR,
@@ -107,6 +109,13 @@ export async function executePipeline(cfg) {
       throw new Error('VPC configuration is invalid; no resources were created.');
     }
     printSuccess('VPC, subnets, and security groups validated');
+
+    // Best-effort: the topology check above proves the SGs exist and belong to
+    // the VPC, but not that their rules permit the 443 data path. A stripped
+    // egress rule leaves the demo unable to send anything out: no error, just
+    // no data. Warn (never block) before the ~30-min build so it's caught early.
+    const sgWarnings = await checkSecurityGroupRules(cfg);
+    for (const w of sgWarnings) printWarning(w);
     console.error();
   }
 

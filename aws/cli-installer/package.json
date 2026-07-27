@@ -6,7 +6,10 @@
   "bin": "./bin/cli-installer.mjs",
   "scripts": {
     "start": "node bin/open-stack.mjs",
-    "test": "node --test test/unit.test.mjs"
+    "test": "node --test test/unit.test.mjs test/e2e/e2e-unit.test.mjs",
+    "test:unit": "node --test test/unit.test.mjs test/e2e/e2e-unit.test.mjs",
+    "e2e": "node test/e2e/run.mjs",
+    "e2e:list": "node test/e2e/run.mjs --list"
   },
   "repository": {
     "type": "git",
