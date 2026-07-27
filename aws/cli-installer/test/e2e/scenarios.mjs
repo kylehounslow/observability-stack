@@ -62,7 +62,7 @@ export const SCENARIOS = [
   },
   {
     name: 'managed-vpc-nodemo',
-    description: 'Managed domain in a VPC (private endpoints), no demo — create/destroy only',
+    description: 'Managed domain in a VPC (private endpoints), no demo (create/destroy only)',
     backend: 'managed',
     vpc: true,
     demo: false,
@@ -70,7 +70,7 @@ export const SCENARIOS = [
     // A VPC-attached OSIS pipeline exposes a VPC-PRIVATE ingest endpoint (resolves
     // to RFC-1918 addresses reachable only inside the VPC). The synthetic OTLP push
     // originates from the developer's host, which has no route into the VPC, so it
-    // can never reach that endpoint — data-flow verification is not applicable here.
+    // can never reach that endpoint, so data-flow verification is not applicable here.
     // This scenario therefore exercises create + the full teardown path only (the
     // CLI still proves the VPC-attached pipeline reaches ACTIVE before exiting 0).
     // Use managed-vpc-demo to verify actual VPC data flow (demo runs in-VPC).
@@ -142,7 +142,7 @@ export function buildPipelineName(scenario, suffix) {
  * @param {object} opts
  * @param {string} opts.pipelineName
  * @param {string} opts.region
- * @param {object|null} [opts.vpc]  { vpcId, subnetIds[], securityGroupIds[] } — required if scenario.vpc
+ * @param {object|null} [opts.vpc]  { vpcId, subnetIds[], securityGroupIds[] }, required if scenario.vpc
  * @returns {string[]} argv
  */
 export function buildCreateArgs(scenario, opts) {
@@ -150,7 +150,7 @@ export function buildCreateArgs(scenario, opts) {
   if (!pipelineName) throw new Error('buildCreateArgs: pipelineName is required');
   if (!region) throw new Error('buildCreateArgs: region is required');
 
-  // Quick mode (the default — no --advanced) is what we want here: it auto-creates
+  // Quick mode (the default, no --advanced) is what we want here: it auto-creates
   // the whole stack (IAM OSI role, APS workspace, Application) named after the
   // pipeline, while still honoring every explicit flag we pass below. Advanced mode
   // only creates the resources you name explicitly, so passing --advanced with just

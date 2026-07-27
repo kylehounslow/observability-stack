@@ -1,5 +1,5 @@
 /**
- * Unit tests for the PURE parts of the e2e harness — arg construction, the
+ * Unit tests for the PURE parts of the e2e harness: arg construction, the
  * scenario matrix, count evaluation, and synthetic OTLP payloads. These run
  * anywhere (no AWS, no credentials) and guard the harness logic itself.
  *
@@ -51,7 +51,7 @@ describe('scenario matrix', () => {
 
   it('the VPC no-demo scenario does not verify data flow (private ingest unreachable from outside)', () => {
     // A VPC-attached OSIS ingest endpoint is VPC-private, so a synthetic push from
-    // the runner host can never reach it — verifying data flow there would be a
+    // the runner host can never reach it, so verifying data flow there would be a
     // guaranteed false failure. VPC data flow is proven by the in-VPC demo instead.
     assert.equal(getScenario('managed-vpc-nodemo').verifyDataFlow, false);
     assert.equal(getScenario('managed-vpc-demo').verifyDataFlow, true);
@@ -174,7 +174,7 @@ describe('buildCreateArgs', () => {
 
   it('produces args that validateConfig accepts and resolve a full stack (integration with cli.mjs)', async () => {
     // Cross-check: the args we build should parse and validate cleanly, AND once
-    // defaults are applied they must resolve into an actionable full stack — an
+    // defaults are applied they must resolve into an actionable full stack: an
     // OSI role, an APS workspace, and an app. This guards against a regression
     // where the harness selected --advanced and left iamAction empty, which made
     // the CLI create only the domain and then fail deep in OSIS pipeline creation

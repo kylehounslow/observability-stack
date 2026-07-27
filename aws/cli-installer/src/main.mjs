@@ -110,10 +110,8 @@ export async function executePipeline(cfg) {
     }
     printSuccess('VPC, subnets, and security groups validated');
 
-    // Best-effort: the topology check above proves the SGs exist and belong to
-    // the VPC, but not that their rules permit the 443 data path. A stripped
-    // egress rule leaves the demo unable to send anything out: no error, just
-    // no data. Warn (never block) before the ~30-min build so it's caught early.
+    // Topology validation proves the SGs exist and belong to the VPC, not that
+    // their rules permit the 443 data path. Warn before the ~30-min build.
     const sgWarnings = await checkSecurityGroupRules(cfg);
     for (const w of sgWarnings) printWarning(w);
     console.error();

@@ -4,7 +4,7 @@
  * After a stack is created and telemetry is pushed (either by the EC2 OTel-demo
  * or a synthetic OTLP push), these helpers confirm that documents actually
  * landed in the expected OpenSearch indices by querying through the managed
- * OpenSearch UI (Application) endpoint — the same SigV4 proxy path the installer
+ * OpenSearch UI (Application) endpoint, the same SigV4 proxy path the installer
  * uses, which works even for VPC-private domains from outside the VPC.
  *
  * Pure helpers (index expectations, count evaluation, OTLP payload building) are
@@ -230,7 +230,7 @@ export async function waitForData({
     }
     last = evaluateCounts(counts, { requireSignals });
     const summary = last.results.map((r) => `${r.pattern}=${r.count}${r.required ? '' : '(opt)'}`).join(' ');
-    log(`counts: ${summary} — ${last.ok ? 'OK' : 'waiting'}`);
+    log(`counts: ${summary} (${last.ok ? 'OK' : 'waiting'})`);
     if (last.ok) return { ...last, elapsedMs: Date.now() - start };
     await new Promise((r) => setTimeout(r, intervalMs));
   }

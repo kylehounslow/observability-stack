@@ -1762,24 +1762,16 @@ export function permissionsAllowInternet(permissions, port) {
 }
 
 /**
- * Analyze the security groups the stack attaches to the EC2 demo, OSIS pipeline,
- * and OpenSearch domain, and return WARNING strings for rules that would silently
- * break the data path. Pure: takes the DescribeSecurityGroups result so it is
- * unit-testable. Warnings only, never hard-fails: a user's network may route the
- * same traffic via other groups, a NAT, or NACLs we can't see.
- *
- * All three components share `groupIds` (see ec2-demo.mjs / createOsiPipeline /
- * createOpenSearch). There are two distinct egress needs, only one of which is
- * intra-VPC:
- *   - Intra-VPC egress 443 (always): OSIS reaches the domain; with a demo, the
- *     demo's collector reaches the VPC-private OSIS ingest endpoint. Satisfied by
- *     a self-reference, a VPC-CIDR rule, or 0.0.0.0/0.
- *   - Internet egress 443 (only with a demo): the instance bootstraps over the
- *     public internet (dnf, GitHub clone, container image pulls). This traffic
- *     does NOT flow through the VPC-private endpoint, so only a 0.0.0.0/0 egress
- *     rule (to a NAT/IGW) satisfies it; a VPC-CIDR-scoped rule does not.
- * Plus intra-VPC ingress 443 (always): OSIS accepts OTLP from the demo and the
- * domain accepts requests from OSIS.
+ * Return WARNING strings for security-group rules that break the stack's data
+ * path. Pure (takes the DescribeSecurityGroups result). Warnings only: a user's
+ * network may route the same traffic via other groups, a NAT, or NACLs we can't
+ * see. The EC2 demo, OSIS, and domain share `groupIds`, so the union must allow:
+ *   - Intra-VPC egress 443 (always): OSIS to domain; with a demo, demo collector
+ *     to the VPC-private OSIS ingest. Any of self-ref, VPC-CIDR, or 0.0.0.0/0.
+ *   - Internet egress 443 (demo only): the instance bootstraps over the public
+ *     internet (dnf, GitHub, image pulls), which does not use the VPC-private
+ *     endpoint. Only 0.0.0.0/0 (via a NAT/IGW) satisfies it, not a VPC-CIDR rule.
+ *   - Intra-VPC ingress 443 (always): OSIS from the demo, domain from OSIS.
  *
  * @param {object[]} groups  DescribeSecurityGroups result
  * @param {object} opts

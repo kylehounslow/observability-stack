@@ -9,11 +9,11 @@
  *
  * For each selected scenario it:
  *   1. creates the stack via the real CLI (`bin/cli-installer.mjs`),
- *   2. drives telemetry in — the EC2 OTel-demo (demo scenarios) or a synthetic
+ *   2. drives telemetry in: the EC2 OTel-demo (demo scenarios) or a synthetic
  *      OTLP push (no-demo scenarios),
  *   3. verifies documents land in the expected OpenSearch indices by querying
  *      through the managed OpenSearch UI endpoint (works for VPC-private domains),
- *   4. tears the stack down — always, even on failure (unless --no-teardown).
+ *   4. tears the stack down, always, even on failure (unless --no-teardown).
  *
  * Usage:
  *   AWS_PROFILE=<sandbox> node test/e2e/run.mjs [options]
@@ -74,7 +74,7 @@ function runCli(args) {
   });
 }
 
-/** Short run id from the current time — collision-avoidance suffix for names. */
+/** Short run id from the current time; collision-avoidance suffix for names. */
 function runSuffix() {
   return Math.floor(Date.now() / 1000).toString(36).slice(-5);
 }
@@ -84,7 +84,7 @@ async function verifyScenario(scenario, { pipelineName, region, dataTimeoutMs })
   const os = new OpenSearchClient({ region });
   const { ApplicationSummaries } = await os.send(new ListApplicationsCommand({}));
   const app = (ApplicationSummaries || []).find((a) => a.name === pipelineName);
-  if (!app) throw new Error('OpenSearch Application not found — cannot verify data flow');
+  if (!app) throw new Error('OpenSearch Application not found; cannot verify data flow');
   const { endpoint: appEndpoint } = await os.send(new GetApplicationCommand({ id: app.id }));
   if (!appEndpoint) throw new Error('OpenSearch Application endpoint not populated');
   log(scenario.name, `app endpoint: ${appEndpoint}`);
@@ -159,7 +159,7 @@ async function main() {
 
   for (const scenario of selected) {
     if (scenario.vpc && !vpc) {
-      log(scenario.name, 'SKIP — VPC env vars not set (E2E_VPC_ID / E2E_SUBNET_IDS / E2E_SECURITY_GROUP_IDS)');
+      log(scenario.name, 'SKIP: VPC env vars not set (E2E_VPC_ID / E2E_SUBNET_IDS / E2E_SECURITY_GROUP_IDS)');
       summary.push({ scenario: scenario.name, status: 'skipped', reason: 'no VPC env' });
       continue;
     }
@@ -178,8 +178,8 @@ async function main() {
 
       if (scenario.verifyDataFlow === false) {
         // Data-flow verification isn't applicable (e.g. a VPC-private ingest
-        // endpoint the runner host can't reach). A clean create — the CLI exits 0
-        // only after every resource, including the pipeline reaching ACTIVE — plus
+        // endpoint the runner host can't reach). A clean create (the CLI exits 0
+        // only after every resource, including the pipeline reaching ACTIVE) plus
         // the teardown below is what this scenario proves.
         status = 'passed';
         detail = 'created (data-flow verification not applicable; teardown exercised)';
@@ -203,13 +203,13 @@ async function main() {
       if (opts.teardown) {
         log(scenario.name, 'tearing down...');
         const code = await runCli(buildDestroyArgs(scenario, base));
-        if (code !== 0) log(scenario.name, `WARNING: destroy exited ${code} — check for leftover resources`);
+        if (code !== 0) log(scenario.name, `WARNING: destroy exited ${code}; check for leftover resources`);
       } else {
-        log(scenario.name, 'teardown skipped (--no-teardown) — remember to destroy manually');
+        log(scenario.name, 'teardown skipped (--no-teardown); remember to destroy manually');
       }
     }
 
-    log(scenario.name, `=== ${status.toUpperCase()} — ${detail} ===\n`);
+    log(scenario.name, `=== ${status.toUpperCase()}: ${detail} ===\n`);
     summary.push({ scenario: scenario.name, status, detail });
   }
 
