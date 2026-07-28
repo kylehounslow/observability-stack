@@ -12,15 +12,39 @@ updates:
         patterns: ["*"]
         group-by: dependency-name
 
+  # npm dependencies across the AWS install paths (CDK app, CLI installer)
+  - package-ecosystem: "npm"
+    directories:
+      - "/aws/cdk"
+      - "/aws/cli-installer"
+    schedule:
+      interval: "weekly"
+    groups:
+      aws-npm:
+        patterns: ["*"]
+        group-by: dependency-name
+
   # All Python dependencies across examples/
   - package-ecosystem: "pip"
     directories:
       - "/examples/langchain/bedrock-financial-assistant"
       - "/examples/strands/code-assistant"
       - "/examples/plain-agents/weather-agent"
+      - "/examples/agent-evals/genai-sdk"
     schedule:
       interval: "weekly"
     groups:
       examples-python:
+        update-types: ["minor", "patch"]
+        group-by: dependency-name
+
+  # Python dependencies for the agent-eval canary
+  - package-ecosystem: "pip"
+    directories:
+      - "/docker-compose/agent-eval-canary"
+    schedule:
+      interval: "weekly"
+    groups:
+      canary-python:
         update-types: ["minor", "patch"]
         group-by: dependency-name
