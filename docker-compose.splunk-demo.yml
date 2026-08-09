@@ -1,0 +1,41 @@
+# Splunk OTel distribution overlay for the side-by-side POC.
+# See docker-compose/splunk-otel-collector/README.md to run.
+
+services:
+  splunk-otel-collector:
+    image: quay.io/signalfx/splunk-otel-collector:${SPLUNK_COLLECTOR_VERSION:-latest}
+    container_name: splunk-otel-collector
+    pull_policy: always
+    command: ["--config=/etc/otelcol-config.yml"]
+    volumes:
+      - ./docker-compose/splunk-otel-collector/config.yaml:/etc/otelcol-config.yml
+    ports:
+      # Non-default host ports to avoid collision with the base collector's 4317/4318.
+      - "14317:4317"
+      - "14318:4318"
+      - "13133:13133"
+    networks:
+      - observability-stack-network
+    restart: unless-stopped
+    environment:
+      - SPLUNK_ACCESS_TOKEN
+      - SPLUNK_REALM
+      - SPLUNK_API_URL=https://api.${SPLUNK_REALM}.observability.splunkcloud.com
+      - SPLUNK_INGEST_URL=https://ingest.${SPLUNK_REALM}.observability.splunkcloud.com
+      - SPLUNK_HEC_TOKEN
+      - SPLUNK_HEC_URL
+      - SPLUNK_HEC_INDEX
+      - SPLUNK_LISTEN_INTERFACE=0.0.0.0
+      - SPLUNK_MEMORY_TOTAL_MIB=512
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+    depends_on:
+      otel-collector:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:13133"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
