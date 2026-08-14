@@ -146,6 +146,17 @@ Contains Kubernetes Helm chart for production-like deployments.
 - `values.yaml`: All configurable parameters with defaults
 - `templates/`: Kubernetes resource definitions using Go templating
 
+### aws/cdk/
+
+Contains the AWS CDK app (TypeScript) for a managed AWS deployment: OpenSearch, Amazon Managed Prometheus, an OSIS ingestion pipeline, the OpenSearch Application and dashboards, and an optional demo EC2 instance (`enableDemo`).
+
+**Key Files**:
+- `bin/app.ts`: App entry; instantiates `ObsInfra` and `ObservabilityStack`
+- `lib/demo-workload.ts`: Optional EC2 demo; its user-data is a Docker Compose bring-up injected via CloudFormation `Fn::Sub`
+- `custom-resources/`: UI-init and FGAC role-mapping resources
+
+**Gotcha**: the demo user-data in `lib/demo-workload.ts` is a single CloudFormation `Fn::Sub` string, so a bare shell `${VAR}` (even inside a comment) is read as a template reference and fails synth or deploy with `Unresolved resource dependencies [...]`. Escape shell variables as `${!VAR}`; `$(...)` command substitution is safe. `${OsiEndpoint}` is the one intentional `Fn::Sub` variable.
+
 ### examples/
 
 Contains working code examples for instrumenting agent applications with OpenTelemetry.
