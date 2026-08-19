@@ -103,6 +103,7 @@ export default defineConfig({
 							items: [
 								{ label: 'Ingest Your First Traces', link: '/get-started/quickstart/first-traces/' },
 								{ label: 'Create Your First Dashboard', link: '/get-started/quickstart/first-dashboard/' },
+								{ label: 'OpenTelemetry Demo Application', link: '/get-started/quickstart/otel-demo/' },
 							],
 						},
 					],
