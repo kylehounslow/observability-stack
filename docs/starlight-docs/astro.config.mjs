@@ -274,6 +274,7 @@ export default defineConfig({
 						{ label: 'Overview', link: '/ai-observability/' },
 						{ label: 'Getting Started', link: '/ai-observability/getting-started/' },
 						{ label: 'Framework Integrations', link: '/send-data/ai-agents/integrations/' },
+						{ label: 'Claude Platform', link: '/send-data/ai-agents/claude-platform/' },
 						{ label: 'Agent Tracing', link: '/ai-observability/agent-tracing/' },
 						{ label: 'Agent Graph & Path', link: '/ai-observability/agent-tracing/graph/' },
 					],
