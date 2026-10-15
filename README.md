@@ -246,6 +246,17 @@ agent("What's the weather like?")
 ```
 
 
+## Instrumenting Without Code Changes (eBPF)
+
+[OpenTelemetry eBPF Instrumentation (OBI)](https://opentelemetry.io/docs/zero-code/obi/) traces HTTP, gRPC, and database calls from unmodified services in any language and sends them to the stack over OTLP. Run it as a Kubernetes DaemonSet or a privileged container, and set `OTEL_EBPF_BPF_CONTEXT_PROPAGATION=all` so cross-service calls link into one trace and show up on the Application Map:
+
+```bash
+helm install obi open-telemetry/opentelemetry-ebpf-instrumentation \
+  --namespace obi --create-namespace -f obi-values.yaml
+```
+
+See [eBPF Instrumentation (OBI)](https://observability.opensearch.org/docs/send-data/opentelemetry/ebpf-instrumentation/) for the Helm values, a Docker Compose example, and kernel requirements.
+
 ## Managing Services
 
 ### Common Commands

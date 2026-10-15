@@ -201,6 +201,8 @@ The eBPF agent instruments `net/http`, `google.golang.org/grpc`, and `database/s
 
 For most Go applications, [manual instrumentation](/docs/send-data/opentelemetry/manual-instrumentation/) is preferred because it provides finer control and does not require root access.
 
+To instrument services in any language from a single node-level agent, see [eBPF Instrumentation (OBI)](/docs/send-data/opentelemetry/ebpf-instrumentation/).
+
 ## Verifying Instrumentation
 
 After starting your instrumented application, verify that telemetry is flowing:
@@ -237,6 +239,7 @@ After starting your instrumented application, verify that telemetry is flowing:
 ## Related Links
 
 - [Manual Instrumentation](/docs/send-data/opentelemetry/manual-instrumentation/) -- Add custom spans and metrics
+- [eBPF Instrumentation (OBI)](/docs/send-data/opentelemetry/ebpf-instrumentation/) -- Instrument services without SDKs or code changes
 - [Collector Configuration](/docs/send-data/opentelemetry/collector/) -- OTel Collector pipeline setup
 - [Sampling Strategies](/docs/send-data/opentelemetry/sampling/) -- Control telemetry volume
 - [Applications](/docs/send-data/applications/) -- Language-specific application guides
