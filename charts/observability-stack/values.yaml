@@ -371,6 +371,44 @@ examples:
     image: "ghcr.io/kylehounslow/observability-stack/canary:latest"
     interval: "120"
 
+# -- OpenTelemetry eBPF Instrumentation (optional)
+# OBI DaemonSet that traces processes without an OTel SDK. Runs privileged with hostPID and hostNetwork.
+# The default selector matches only the ebpfDemo pods; widen discovery.instrument for your own workloads,
+# but keep SDK-instrumented and observability-stack pods out of it.
+obi:
+  enabled: false
+  config:
+    data:
+      ebpf:
+        context_propagation: all
+      discovery:
+        instrument:
+          - k8s_pod_labels:
+              app.kubernetes.io/part-of: ebpf-demo
+      attributes:
+        kubernetes:
+          enable: true
+      otel_traces_export:
+        endpoint: "http://{{ .Release.Name }}-opentelemetry-collector.{{ .Release.Namespace }}.svc.cluster.local:4318"
+      otel_metrics_export:
+        endpoint: "http://{{ .Release.Name }}-opentelemetry-collector.{{ .Release.Namespace }}.svc.cluster.local:4318"
+
+# -- eBPF demo services (optional)
+# Go, Java, and Python services with no OTel SDK, traced only by OBI. Requires obi.enabled.
+# storefront (Go) calls catalog (Java) and ratings (Python), which both call inventory (Go).
+# When opentelemetry-demo is enabled, storefront also calls its frontend-proxy.
+ebpfDemo:
+  enabled: false
+  imagePullPolicy: IfNotPresent
+  images:
+    go: "ghcr.io/kylehounslow/observability-stack/ebpf-demo-go:latest"
+    java: "ghcr.io/kylehounslow/observability-stack/ebpf-demo-java:latest"
+    python: "ghcr.io/kylehounslow/observability-stack/ebpf-demo-python:latest"
+  # Seconds between loadgen requests to storefront.
+  interval: "1"
+  # Seconds loadgen waits before its first request.
+  startDelay: "60"
+
 # -- OpenTelemetry Demo (optional)
 # Full microservices e-commerce app that generates realistic telemetry.
 # Disabled by default — adds ~2GB memory. Enable with opentelemetry-demo.enabled=true.

@@ -249,6 +249,16 @@ resource "helm_release" "observability_stack" {
     value = var.enable_otel_demo ? "true" : "false"
   }
 
+  # --- eBPF instrumentation + demo (conditional) ---
+  set {
+    name  = "obi.enabled"
+    value = var.enable_ebpf_demo ? "true" : "false"
+  }
+  set {
+    name  = "ebpfDemo.enabled"
+    value = var.enable_ebpf_demo ? "true" : "false"
+  }
+
   # --- Custom credentials (conditional) ---
   dynamic "set" {
     for_each = var.opensearch_username != "" ? [1] : []

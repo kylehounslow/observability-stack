@@ -1,0 +1,87 @@
+{{- if .Values.ebpfDemo.enabled }}
+{{- $calls := dict
+  "storefront" (printf "http://catalog:8080/products,http://ratings:8080/ratings%s" (ternary ",http://frontend-proxy:8080/api/products" "" (index .Values "opentelemetry-demo" "enabled")))
+  "catalog" "http://inventory:8080/stock"
+  "ratings" "http://inventory:8080/stock"
+  "inventory" "" }}
+{{- $lang := dict "storefront" "go" "catalog" "java" "ratings" "python" "inventory" "go" }}
+{{- range $name := list "storefront" "catalog" "ratings" "inventory" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/part-of: ebpf-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $name }}
+        app.kubernetes.io/part-of: ebpf-demo
+    spec:
+      # Spread across nodes so the map only links calls through traceparent, not same-host correlation.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: ebpf-demo
+      containers:
+        - name: {{ $name }}
+          image: {{ index $.Values.ebpfDemo.images (index $lang $name) }}
+          imagePullPolicy: {{ $.Values.ebpfDemo.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: CALLS
+              value: {{ index $calls $name | quote }}
+          resources:
+            limits:
+              memory: {{ ternary "256Mi" "64Mi" (eq (index $lang $name) "java") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ebpf-demo-loadgen
+  labels:
+    app: ebpf-demo-loadgen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ebpf-demo-loadgen
+  template:
+    metadata:
+      labels:
+        app: ebpf-demo-loadgen
+    spec:
+      containers:
+        - name: loadgen
+          image: busybox:1.36
+          # Start after OBI attaches. On kernels before 6.4, OBI can't propagate on connections opened before it started.
+          command: ["sh", "-c", "sleep {{ .Values.ebpfDemo.startDelay }}; while true; do wget -qO- http://storefront:8080/checkout >/dev/null 2>&1; sleep {{ .Values.ebpfDemo.interval }}; done"]
+          resources:
+            limits:
+              memory: "16Mi"
+{{- end }}
