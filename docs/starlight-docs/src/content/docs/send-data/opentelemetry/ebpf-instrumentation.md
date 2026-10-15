@@ -148,7 +148,6 @@ When both ends of a call run on the same host, one OBI instance sees both the ou
 
 | Case | Behavior |
 |------|----------|
-| Go services over HTTPS | Propagates. OBI writes `traceparent` in the Go HTTP library before TLS encryption. |
 | Non-Go services over HTTPS or mTLS (tested with Java and Python) | Doesn't link across nodes. OBI can't write the header into TLS-encrypted traffic from these runtimes, and the TCP-level fallback didn't link cross-node calls in testing. Those edges are missing from the map. |
 | Services instrumented with an OTel SDK | `discovery.exclude_otel_instrumented_services` (default `true`) tells OBI to skip processes that publish their own telemetry, but it doesn't catch every SDK. With OBI selecting the OpenTelemetry Demo namespace, Python and C++ services kept both SDK and OBI spans 8 minutes after OBI started. Scope OBI's selectors to workloads without an SDK. Calls between OBI and SDK services link in both directions; SDK services read OBI's `Traceparent` header case-insensitively. |
 | Data Prepper 2.16.0 and earlier | A service that only makes outgoing calls appears on the map only if at least one of its calls resolves to an edge. Without context propagation, those callers disappear. |
