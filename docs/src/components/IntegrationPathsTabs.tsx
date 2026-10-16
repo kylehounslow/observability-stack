@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-type TabId = 'quick' | 'standard' | 'custom';
+type TabId = 'quick' | 'standard' | 'custom' | 'ebpf';
 
 interface Tab {
   id: TabId;
@@ -10,6 +10,7 @@ interface Tab {
   description: string;
   code: string;
   language: string;
+  filename: string;
   benefits: string[];
 }
 
@@ -21,6 +22,7 @@ const tabs: Tab[] = [
     title: 'GenAI SDK',
     description: 'One-line setup with automatic OpenTelemetry instrumentation. Decorators for agents, tools, and workflows.',
     language: 'python',
+    filename: 'example.py',
     code: `from opensearch_genai_sdk_py import register, agent, tool
 
 # One-line setup — configures OTEL pipeline automatically
@@ -52,6 +54,7 @@ result = assistant("What's the weather?")`,
     title: 'Manual OTEL Instrumentation',
     description: 'Full control over your observability. Use standard OTEL APIs directly.',
     language: 'python',
+    filename: 'example.py',
     code: `from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -86,6 +89,7 @@ with tracer.start_as_current_span("agent_task"):
     title: 'Bring Your Own OTEL Setup',
     description: 'Already using OTEL? Just point your exporter to Observability Stack. Keep your existing setup.',
     language: 'python',
+    filename: 'example.py',
     code: `from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
@@ -108,6 +112,34 @@ trace_provider.add_span_processor(
       'No code changes required',
       'Works with any OTEL collector',
       'Gradual migration path',
+    ],
+  },
+  {
+    id: 'ebpf',
+    label: 'Zero-code',
+    timing: 'Helm',
+    title: 'eBPF Instrumentation (OBI)',
+    description: 'Traces and RED metrics from running services with no SDK or code changes. OpenTelemetry eBPF Instrumentation runs as a DaemonSet on Linux nodes.',
+    language: 'yaml',
+    filename: 'obi-values.yaml',
+    code: `# helm install obi open-telemetry/opentelemetry-ebpf-instrumentation -f obi-values.yaml
+config:
+  data:
+    ebpf:
+      # Required for connected service maps; OBI defaults to disabled
+      context_propagation: all
+    discovery:
+      instrument:
+        - k8s_namespace: my-apps
+    otel_traces_export:
+      endpoint: http://obs-opentelemetry-collector.default.svc.cluster.local:4318
+    otel_metrics_export:
+      endpoint: http://obs-opentelemetry-collector.default.svc.cluster.local:4318`,
+    benefits: [
+      'No SDK or code changes in the service',
+      'HTTP/S, HTTP/2, gRPC, Kafka, and database calls',
+      'Spans show up on the Application Map alongside SDK traces',
+      'Skips processes that already export their own OTel telemetry',
     ],
   },
 ];
@@ -164,7 +196,7 @@ export default function IntegrationPathsTabs() {
           {/* Code Block */}
           <div className="bg-slate-900 rounded-lg border border-slate-800 overflow-hidden">
             <div className="bg-slate-950 px-4 py-2 border-b border-slate-800 flex items-center justify-between">
-              <span className="text-sm text-slate-400 font-mono">example.py</span>
+              <span className="text-sm text-slate-400 font-mono">{currentTab.filename}</span>
               <span className="text-xs text-slate-500 uppercase">{currentTab.language}</span>
             </div>
             <div className="p-6 overflow-x-auto">
