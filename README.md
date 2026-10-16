@@ -76,6 +76,7 @@ cd observability-stack
 The `.env` file contains all configurable parameters:
 - **Example services**: Included by default via `INCLUDE_COMPOSE_EXAMPLES=docker-compose.examples.yml`. Comment out to run only the core stack.
 - **OpenTelemetry Demo**: Not enabled by default. Uncomment `INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml` to add the full [OpenTelemetry Demo](https://opentelemetry.io/docs/demo/) microservices app for realistic e-commerce telemetry (~2GB additional memory required).
+- **eBPF example**: Not enabled by default. With the OpenTelemetry Demo enabled, uncomment `INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml` and set `QUOTE_ADDR=http://rate-gateway:18101` to add services with no OTel SDK, traced by OBI, to its shipping path. Linux hosts only; OBI runs privileged.
 
 See [Configuration](#configuration) section for more details.
 
@@ -255,7 +256,7 @@ helm install obi open-telemetry/opentelemetry-ebpf-instrumentation \
   --namespace obi --create-namespace -f obi-values.yaml
 ```
 
-See [eBPF Instrumentation (OBI)](https://observability.opensearch.org/docs/send-data/opentelemetry/ebpf-instrumentation/) for the Helm values, a Docker Compose example, and kernel requirements.
+See [eBPF Instrumentation (OBI)](https://observability.opensearch.org/docs/send-data/opentelemetry/ebpf-instrumentation/) for the Helm values, a Docker Compose example, the eBPF example, and kernel requirements.
 
 ## Managing Services
 

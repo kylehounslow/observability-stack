@@ -1,0 +1,69 @@
+{{- if .Values.ebpfDemo.enabled }}
+{{- if not (index .Values "opentelemetry-demo" "enabled") }}
+{{- fail "ebpfDemo.enabled requires opentelemetry-demo.enabled=true. Install with -f values-ebpf-demo.yaml, which also points shipping's QUOTE_ADDR at rate-gateway." }}
+{{- end }}
+{{- /* shipping (SDK) -> rate-gateway -> quote (SDK), carrier-rates, and fuel-surcharge -> zone-lookup. */}}
+{{- $services := list
+  (dict "name" "rate-gateway" "lang" "go" "upstream" "http://quote:8080" "calls" "http://carrier-rates:8080/rates,http://fuel-surcharge:8080/surcharge")
+  (dict "name" "carrier-rates" "lang" "java" "upstream" "" "calls" "")
+  (dict "name" "fuel-surcharge" "lang" "python" "upstream" "" "calls" "http://zone-lookup:8080/zone")
+  (dict "name" "zone-lookup" "lang" "go" "upstream" "" "calls" "") }}
+{{- range $s := $services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $s.name }}
+  labels:
+    app.kubernetes.io/name: {{ $s.name }}
+    app.kubernetes.io/part-of: ebpf-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $s.name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ $s.name }}
+        app.kubernetes.io/part-of: ebpf-demo
+    spec:
+      # Spread across nodes so the map only links calls through traceparent, not same-host correlation.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: ebpf-demo
+      containers:
+        - name: {{ $s.name }}
+          image: {{ index $.Values.ebpfDemo.images $s.lang }}
+          imagePullPolicy: {{ $.Values.ebpfDemo.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: CALLS
+              value: {{ $s.calls | quote }}
+            {{- if $s.upstream }}
+            - name: UPSTREAM
+              value: {{ $s.upstream | quote }}
+            {{- end }}
+          resources:
+            limits:
+              memory: {{ ternary "256Mi" "64Mi" (eq $s.lang "java") }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $s.name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $s.name }}
+  ports:
+    - port: 8080
+      targetPort: 8080
+{{- end }}
+{{- end }}

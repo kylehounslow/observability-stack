@@ -371,6 +371,52 @@ examples:
     image: "ghcr.io/kylehounslow/observability-stack/canary:latest"
     interval: "120"
 
+# -- OpenTelemetry eBPF Instrumentation (optional)
+# OBI DaemonSet that traces processes without an OTel SDK. Runs privileged with hostPID and hostNetwork.
+# The default selector matches only the ebpfDemo pods; widen discovery.instrument for your own workloads,
+# but keep SDK-instrumented and observability-stack pods out of it.
+obi:
+  enabled: false
+  image:
+    # v0.14.0 (the chart appVersion)
+    digest: "sha256:0b063b9ec47e10dd4503ce1dc21f273acd3c85ffc9c135f0b753ee64de9c0819"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+  config:
+    data:
+      # The chart's default config opens a Prometheus port on every node's host network; OTLP export is enough.
+      prometheus_export: null
+      ebpf:
+        context_propagation: all
+      discovery:
+        instrument:
+          - k8s_pod_labels:
+              app.kubernetes.io/part-of: ebpf-demo
+      attributes:
+        kubernetes:
+          enable: true
+      otel_traces_export:
+        endpoint: "http://{{ .Release.Name }}-opentelemetry-collector.{{ .Release.Namespace }}.svc.cluster.local:4318"
+      otel_metrics_export:
+        endpoint: "http://{{ .Release.Name }}-opentelemetry-collector.{{ .Release.Namespace }}.svc.cluster.local:4318"
+
+# -- eBPF example services (optional)
+# Go, Java, and Python services with no OTel SDK, traced only by OBI, placed in the
+# OpenTelemetry Demo's shipping path: shipping -> rate-gateway -> quote, carrier-rates,
+# fuel-surcharge -> zone-lookup. Requires obi.enabled, opentelemetry-demo.enabled, and
+# shipping's QUOTE_ADDR pointing at rate-gateway. values-ebpf-demo.yaml sets all three.
+ebpfDemo:
+  enabled: false
+  imagePullPolicy: IfNotPresent
+  images:
+    go: "ghcr.io/kylehounslow/observability-stack/ebpf-demo-go:latest"
+    java: "ghcr.io/kylehounslow/observability-stack/ebpf-demo-java:latest"
+    python: "ghcr.io/kylehounslow/observability-stack/ebpf-demo-python:latest"
+
 # -- OpenTelemetry Demo (optional)
 # Full microservices e-commerce app that generates realistic telemetry.
 # Disabled by default — adds ~2GB memory. Enable with opentelemetry-demo.enabled=true.

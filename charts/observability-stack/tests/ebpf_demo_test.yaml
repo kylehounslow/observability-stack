@@ -1,0 +1,55 @@
+suite: ebpf example
+templates:
+  - templates/ebpf-demo.yaml
+tests:
+  - it: should not render by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail without opentelemetry-demo
+    set:
+      ebpfDemo.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "ebpfDemo.enabled requires opentelemetry-demo.enabled=true"
+
+  - it: should render four services when enabled with opentelemetry-demo
+    values:
+      - ../values-ebpf-demo.yaml
+    asserts:
+      - hasDocuments:
+          count: 8  # 4 deployments + 4 services
+      - containsDocument:
+          kind: Deployment
+          apiVersion: apps/v1
+          name: rate-gateway
+          any: true
+
+  - it: should forward rate-gateway to quote and fan out
+    values:
+      - ../values-ebpf-demo.yaml
+    documentIndex: 0  # rate-gateway Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: UPSTREAM
+            value: http://quote:8080
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CALLS
+            value: http://carrier-rates:8080/rates,http://fuel-surcharge:8080/surcharge
+
+  - it: should label pods for the OBI selector
+    values:
+      - ../values-ebpf-demo.yaml
+    documentIndex: 2  # carrier-rates Deployment
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/part-of"]
+          value: ebpf-demo
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: ghcr.io/kylehounslow/observability-stack/ebpf-demo-java:latest
