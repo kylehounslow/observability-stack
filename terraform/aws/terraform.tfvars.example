@@ -11,3 +11,4 @@
 # anonymous_auth     = false
 # enable_examples    = false
 # enable_otel_demo   = false
+# enable_ebpf_demo   = false  # requires enable_otel_demo

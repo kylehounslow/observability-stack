@@ -90,6 +90,12 @@ variable "enable_otel_demo" {
   default     = false
 }
 
+variable "enable_ebpf_demo" {
+  description = "Deploy the OBI eBPF instrumentation DaemonSet (privileged, hostPID, hostNetwork) and the eBPF example services in the OpenTelemetry Demo's shipping path. Requires enable_otel_demo."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags applied to all resources"
   type        = map(string)

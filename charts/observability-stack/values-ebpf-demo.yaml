@@ -1,0 +1,14 @@
+# eBPF example: OBI plus services with no OTel SDK in the OpenTelemetry Demo's shipping path.
+#   helm install obs . -f values-ebpf-demo.yaml
+# OBI runs privileged with hostPID and hostNetwork on every node.
+obi:
+  enabled: true
+ebpfDemo:
+  enabled: true
+opentelemetry-demo:
+  enabled: true
+  components:
+    shipping:
+      envOverrides:
+        - name: QUOTE_ADDR
+          value: http://rate-gateway:8080

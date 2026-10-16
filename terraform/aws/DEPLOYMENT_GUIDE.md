@@ -62,6 +62,7 @@ anonymous_auth   = true                       # Read-only access without login
 enable_waf       = true                       # Rate limiting: 2000 req/5min/IP
 enable_examples  = true                       # Example agent services
 enable_otel_demo = true                       # OTel Demo microservices (~2GB extra)
+enable_ebpf_demo = false                      # OBI DaemonSet + eBPF example services (needs enable_otel_demo)
 node_count       = 3
 ```
 

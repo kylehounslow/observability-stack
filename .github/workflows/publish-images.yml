@@ -31,6 +31,12 @@ jobs:
             context: examples/plain-agents/multi-agent-planner/mcp-server
           - name: canary
             context: docker-compose/canary
+          - name: ebpf-demo-go
+            context: examples/ebpf-demo/go
+          - name: ebpf-demo-java
+            context: examples/ebpf-demo/java
+          - name: ebpf-demo-python
+            context: examples/ebpf-demo/python
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3

@@ -114,6 +114,38 @@ Select which processes to instrument with `OTEL_EBPF_AUTO_TARGET_EXE` (executabl
 
 OBI takes each service name from the process's `OTEL_SERVICE_NAME` environment variable. On Kubernetes it falls back to the `app.kubernetes.io/name` Pod label, then to the owning Deployment, StatefulSet, or DaemonSet name. See [Override service name and namespace](https://opentelemetry.io/docs/zero-code/obi/configure/service-discovery/#override-service-name-and-namespace).
 
+## Example: OBI with the OpenTelemetry Demo
+
+The stack ships an optional example that puts four services with no OTel SDK into the [OpenTelemetry Demo](/docs/get-started/quickstart/otel-demo/)'s shipping path. The OpenTelemetry Demo's `shipping` service calls `rate-gateway` (Go) instead of `quote`, and `rate-gateway` calls `carrier-rates` (Java), `fuel-surcharge` (Python), which calls `zone-lookup` (Go), and then forwards the request to `quote`. OBI traces the four new services, and the OpenTelemetry Demo's SDKs trace the rest, so a checkout trace crosses SDK and eBPF spans in both directions.
+
+```mermaid
+flowchart LR
+    checkout["checkout (SDK)"] --> shipping["shipping (SDK)"]
+    shipping --> rg["rate-gateway (Go, OBI)"]
+    rg --> cr["carrier-rates (Java, OBI)"]
+    rg --> fs["fuel-surcharge (Python, OBI)"]
+    fs --> zl["zone-lookup (Go, OBI)"]
+    rg --> quote["quote (SDK)"]
+```
+
+Kubernetes: install with the bundled values file, which enables OBI, the demo services, and the OpenTelemetry Demo, and points `shipping` at `rate-gateway`:
+
+```bash
+helm install obs charts/observability-stack -f charts/observability-stack/values-ebpf-demo.yaml
+```
+
+With the [EKS Terraform module](/docs/deploy/kubernetes/#eks-deployment), set `enable_otel_demo = true` and `enable_ebpf_demo = true`.
+
+For a complete Helm configuration to copy from, see [`values-ebpf-demo.yaml`](https://github.com/opensearch-project/observability-stack/blob/main/charts/observability-stack/values-ebpf-demo.yaml) and the `obi:` block in the chart's [`values.yaml`](https://github.com/opensearch-project/observability-stack/blob/main/charts/observability-stack/values.yaml), which add an image digest pin, resource limits, a pod-label selector, and no Prometheus host port.
+
+Docker Compose (Linux hosts only): set these in `.env`, then run `docker compose up -d`:
+
+```bash
+INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml
+INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml
+QUOTE_ADDR=http://rate-gateway:18101
+```
+
 ## Verify
 
 Open **Observability** > **Application Monitoring** > **Application Map** and look for edges between the services OBI instruments. To list OBI spans directly, run this PPL query in **Discover** > **Traces**:

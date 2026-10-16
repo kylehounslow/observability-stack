@@ -55,3 +55,9 @@ dependencies:
     version: "0.40.8"
     repository: "https://open-telemetry.github.io/opentelemetry-helm-charts"
     condition: opentelemetry-demo.enabled
+
+  - name: opentelemetry-ebpf-instrumentation
+    alias: obi
+    version: "0.14.3"
+    repository: "https://open-telemetry.github.io/opentelemetry-helm-charts"
+    condition: obi.enabled

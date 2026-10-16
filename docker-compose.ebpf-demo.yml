@@ -1,0 +1,79 @@
+# eBPF Example Services
+# Go, Java, and Python services with no OTel SDK, traced by OpenTelemetry eBPF Instrumentation (OBI),
+# in the OpenTelemetry Demo's shipping path:
+#   shipping -> rate-gateway -> quote, carrier-rates, fuel-surcharge -> zone-lookup
+#
+# This file is included by docker-compose.yml via the 'include:' directive. To use, set in .env:
+#   INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml
+#   INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml
+#   QUOTE_ADDR=http://rate-gateway:18101
+# then run: docker compose up -d
+#
+# Linux hosts only. OBI runs privileged with the host PID namespace and host network.
+
+x-default-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "5m"
+    max-file: "2"
+    tag: "{{.Name}}"
+
+x-ebpf-demo-app: &ebpf-demo-app
+  logging: *logging
+  networks:
+    - observability-stack-network
+  restart: unless-stopped
+
+services:
+  obi:
+    image: otel/ebpf-instrument:v0.14.0@sha256:0b063b9ec47e10dd4503ce1dc21f273acd3c85ffc9c135f0b753ee64de9c0819
+    container_name: obi
+    privileged: true
+    pid: host
+    network_mode: host
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+      - /sys/kernel/security:/sys/kernel/security
+      - /sys/kernel/tracing:/sys/kernel/tracing
+    environment:
+      OTEL_EBPF_BPF_CONTEXT_PROPAGATION: all
+      # Only the demo services listen on these ports.
+      OTEL_EBPF_OPEN_PORT: "18101-18104"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:${OTEL_COLLECTOR_PORT_HTTP:-4318}
+    logging: *logging
+    restart: unless-stopped
+
+  rate-gateway:
+    <<: *ebpf-demo-app
+    build: ./examples/ebpf-demo/go
+    container_name: rate-gateway
+    environment:
+      OTEL_SERVICE_NAME: rate-gateway
+      PORT: "18101"
+      UPSTREAM: http://quote:${QUOTE_PORT}
+      CALLS: http://carrier-rates:18102/rates,http://fuel-surcharge:18103/surcharge
+
+  carrier-rates:
+    <<: *ebpf-demo-app
+    build: ./examples/ebpf-demo/java
+    container_name: carrier-rates
+    environment:
+      OTEL_SERVICE_NAME: carrier-rates
+      PORT: "18102"
+
+  fuel-surcharge:
+    <<: *ebpf-demo-app
+    build: ./examples/ebpf-demo/python
+    container_name: fuel-surcharge
+    environment:
+      OTEL_SERVICE_NAME: fuel-surcharge
+      PORT: "18103"
+      CALLS: http://zone-lookup:18104/zone
+
+  zone-lookup:
+    <<: *ebpf-demo-app
+    build: ./examples/ebpf-demo/go
+    container_name: zone-lookup
+    environment:
+      OTEL_SERVICE_NAME: zone-lookup
+      PORT: "18104"
