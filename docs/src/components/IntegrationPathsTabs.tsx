@@ -140,7 +140,6 @@ config:
       'HTTP/S, HTTP/2, gRPC, Kafka, and database calls',
       'Spans show up on the Application Map alongside SDK traces',
       'Skips processes that already export their own OTel telemetry',
-      'Requires Linux kernel 5.8+ with BTF',
     ],
   },
 ];
