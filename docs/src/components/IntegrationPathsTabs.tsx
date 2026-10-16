@@ -116,7 +116,7 @@ trace_provider.add_span_processor(
   },
   {
     id: 'ebpf',
-    label: 'No code changes',
+    label: 'Zero-code',
     timing: 'Helm',
     title: 'eBPF Instrumentation (OBI)',
     description: 'Traces and RED metrics from running services with no SDK or code changes. OpenTelemetry eBPF Instrumentation runs as a DaemonSet on Linux nodes.',
