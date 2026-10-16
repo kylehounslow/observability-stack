@@ -1,8 +1,13 @@
 # eBPF Demo Services
-# Go, Java, and Python services with no OTel SDK, traced by OpenTelemetry eBPF Instrumentation (OBI).
+# Go, Java, and Python services with no OTel SDK, traced by OpenTelemetry eBPF Instrumentation (OBI),
+# in the OpenTelemetry Demo's shipping path:
+#   shipping -> rate-gateway -> quote, carrier-rates, fuel-surcharge -> zone-lookup
 #
-# This file is included by docker-compose.yml via the 'include:' directive.
-# To use: set INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml in .env, then run: docker compose up -d
+# This file is included by docker-compose.yml via the 'include:' directive. To use, set in .env:
+#   INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml
+#   INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml
+#   QUOTE_ADDR=http://rate-gateway:18101
+# then run: docker compose up -d
 #
 # Linux hosts only. OBI runs privileged with the host PID namespace and host network.
 
@@ -21,7 +26,7 @@ x-ebpf-demo-app: &ebpf-demo-app
 
 services:
   obi:
-    image: otel/ebpf-instrument:v0.14.0
+    image: otel/ebpf-instrument:v0.14.0@sha256:0b063b9ec47e10dd4503ce1dc21f273acd3c85ffc9c135f0b753ee64de9c0819
     container_name: obi
     privileged: true
     pid: host
@@ -38,45 +43,37 @@ services:
     logging: *logging
     restart: unless-stopped
 
-  storefront:
+  rate-gateway:
     <<: *ebpf-demo-app
     build: ./examples/ebpf-demo/go
-    container_name: storefront
+    container_name: rate-gateway
     environment:
-      OTEL_SERVICE_NAME: storefront
+      OTEL_SERVICE_NAME: rate-gateway
       PORT: "18101"
-      CALLS: http://catalog:18102/products,http://ratings:18103/ratings
+      UPSTREAM: http://quote:${QUOTE_PORT}
+      CALLS: http://carrier-rates:18102/rates,http://fuel-surcharge:18103/surcharge
 
-  catalog:
+  carrier-rates:
     <<: *ebpf-demo-app
     build: ./examples/ebpf-demo/java
-    container_name: catalog
+    container_name: carrier-rates
     environment:
-      OTEL_SERVICE_NAME: catalog
+      OTEL_SERVICE_NAME: carrier-rates
       PORT: "18102"
-      CALLS: http://inventory:18104/stock
 
-  ratings:
+  fuel-surcharge:
     <<: *ebpf-demo-app
     build: ./examples/ebpf-demo/python
-    container_name: ratings
+    container_name: fuel-surcharge
     environment:
-      OTEL_SERVICE_NAME: ratings
+      OTEL_SERVICE_NAME: fuel-surcharge
       PORT: "18103"
-      CALLS: http://inventory:18104/stock
+      CALLS: http://zone-lookup:18104/zone
 
-  inventory:
+  zone-lookup:
     <<: *ebpf-demo-app
     build: ./examples/ebpf-demo/go
-    container_name: inventory
+    container_name: zone-lookup
     environment:
-      OTEL_SERVICE_NAME: inventory
+      OTEL_SERVICE_NAME: zone-lookup
       PORT: "18104"
-
-  ebpf-demo-loadgen:
-    <<: *ebpf-demo-app
-    image: busybox:1.36
-    container_name: ebpf-demo-loadgen
-    depends_on: [obi, storefront, catalog, ratings, inventory]
-    # Start after OBI attaches. On kernels before 6.4, OBI can't propagate on connections opened before it started.
-    command: ["sh", "-c", "sleep 60; while true; do wget -qO- http://storefront:18101/checkout >/dev/null 2>&1; sleep 1; done"]

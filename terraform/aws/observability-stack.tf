@@ -174,9 +174,17 @@ resource "helm_release" "observability_stack" {
   wait_for_jobs   = true
   cleanup_on_fail = true
 
+  lifecycle {
+    precondition {
+      condition     = !var.enable_ebpf_demo || var.enable_otel_demo
+      error_message = "enable_ebpf_demo requires enable_otel_demo = true; the eBPF demo services sit in the OpenTelemetry Demo's shipping path."
+    }
+  }
+
   values = concat(
     [file("${path.module}/values-eks.yaml")],
     var.anonymous_auth ? [file("${path.module}/../../charts/observability-stack/values-anonymous-auth.yaml")] : [],
+    var.enable_ebpf_demo ? [file("${path.module}/../../charts/observability-stack/values-ebpf-demo.yaml")] : [],
     [for f in var.extra_helm_values : file(f)]
   )
 
@@ -247,16 +255,6 @@ resource "helm_release" "observability_stack" {
   set {
     name  = "opentelemetry-demo.enabled"
     value = var.enable_otel_demo ? "true" : "false"
-  }
-
-  # --- eBPF instrumentation + demo (conditional) ---
-  set {
-    name  = "obi.enabled"
-    value = var.enable_ebpf_demo ? "true" : "false"
-  }
-  set {
-    name  = "ebpfDemo.enabled"
-    value = var.enable_ebpf_demo ? "true" : "false"
   }
 
   # --- Custom credentials (conditional) ---

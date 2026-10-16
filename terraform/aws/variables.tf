@@ -91,7 +91,7 @@ variable "enable_otel_demo" {
 }
 
 variable "enable_ebpf_demo" {
-  description = "Deploy the OBI eBPF instrumentation DaemonSet (privileged, hostPID, hostNetwork) and the eBPF demo services"
+  description = "Deploy the OBI eBPF instrumentation DaemonSet (privileged, hostPID, hostNetwork) and the eBPF demo services in the OpenTelemetry Demo's shipping path. Requires enable_otel_demo."
   type        = bool
   default     = false
 }

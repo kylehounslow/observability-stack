@@ -7,27 +7,45 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should render four services and a loadgen when enabled
+  - it: should fail without opentelemetry-demo
     set:
       ebpfDemo.enabled: true
     asserts:
+      - failedTemplate:
+          errorPattern: "ebpfDemo.enabled requires opentelemetry-demo.enabled=true"
+
+  - it: should render four services when enabled with opentelemetry-demo
+    values:
+      - ../values-ebpf-demo.yaml
+    asserts:
       - hasDocuments:
-          count: 9  # 4 deployments + 4 services + loadgen
+          count: 8  # 4 deployments + 4 services
       - containsDocument:
           kind: Deployment
           apiVersion: apps/v1
-          name: storefront
-          any: true
-      - containsDocument:
-          kind: Deployment
-          apiVersion: apps/v1
-          name: ebpf-demo-loadgen
+          name: rate-gateway
           any: true
 
+  - it: should forward rate-gateway to quote and fan out
+    values:
+      - ../values-ebpf-demo.yaml
+    documentIndex: 0  # rate-gateway Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: UPSTREAM
+            value: http://quote:8080
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CALLS
+            value: http://carrier-rates:8080/rates,http://fuel-surcharge:8080/surcharge
+
   - it: should label pods for the OBI selector
-    set:
-      ebpfDemo.enabled: true
-    documentIndex: 2  # catalog Deployment
+    values:
+      - ../values-ebpf-demo.yaml
+    documentIndex: 2  # carrier-rates Deployment
     asserts:
       - equal:
           path: spec.template.metadata.labels["app.kubernetes.io/part-of"]
@@ -35,26 +53,3 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].image
           value: ghcr.io/kylehounslow/observability-stack/ebpf-demo-java:latest
-
-  - it: should call frontend-proxy only when opentelemetry-demo is enabled
-    set:
-      ebpfDemo.enabled: true
-      opentelemetry-demo.enabled: true
-    documentIndex: 0  # storefront Deployment
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: CALLS
-            value: http://catalog:8080/products,http://ratings:8080/ratings,http://frontend-proxy:8080/api/products
-
-  - it: should not call frontend-proxy without opentelemetry-demo
-    set:
-      ebpfDemo.enabled: true
-    documentIndex: 0  # storefront Deployment
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: CALLS
-            value: http://catalog:8080/products,http://ratings:8080/ratings

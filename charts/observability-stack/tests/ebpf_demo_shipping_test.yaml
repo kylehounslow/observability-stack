@@ -1,0 +1,19 @@
+suite: ebpf demo shipping wiring
+# values-ebpf-demo.yaml routes the otel-demo shipping service through rate-gateway.
+templates:
+  - charts/opentelemetry-demo/templates/component.yaml
+release:
+  name: obs-stack
+values:
+  - ../values-ebpf-demo.yaml
+tests:
+  - it: should point shipping QUOTE_ADDR at rate-gateway
+    documentSelector:
+      path: spec.template.metadata.labels["app.kubernetes.io/name"]
+      value: shipping
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUOTE_ADDR
+            value: http://rate-gateway:8080
