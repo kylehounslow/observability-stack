@@ -50,6 +50,8 @@ spec:
               value: "https://{{ .Values.opensearchServiceName | default "opensearch-cluster-master" }}:9200"
             - name: ANONYMOUS_AUTH_ENABLED
               value: {{ ((.Values.anonymousAuth).enabled) | default false | quote }}
+            - name: INSTALL_EBPF_EXAMPLE_DASHBOARD
+              value: {{ .Values.ebpfDemo.enabled | default false | quote }}
             - name: ISM_RETENTION_DAYS
               value: {{ .Values.ismRetentionDays | default 7 | quote }}
           volumeMounts:

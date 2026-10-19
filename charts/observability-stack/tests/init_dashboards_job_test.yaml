@@ -51,3 +51,21 @@ tests:
           content:
             name: ISM_RETENTION_DAYS
             value: "7"
+
+  - it: should not install the eBPF example dashboard by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INSTALL_EBPF_EXAMPLE_DASHBOARD
+            value: "false"
+
+  - it: should install the eBPF example dashboard when ebpfDemo is enabled
+    set:
+      ebpfDemo.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: INSTALL_EBPF_EXAMPLE_DASHBOARD
+            value: "true"

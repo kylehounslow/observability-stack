@@ -144,7 +144,10 @@ Docker Compose (Linux hosts only): set these in `.env`, then run `docker compose
 INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml
 INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml
 QUOTE_ADDR=http://rate-gateway:18101
+INSTALL_EBPF_EXAMPLE_DASHBOARD=true
 ```
+
+With the example enabled, the stack also creates an **OBI example services (eBPF metrics)** dashboard from OBI's own metrics: requests per minute, p95 server latency, p95 outgoing call latency by caller and target, and 5xx responses per service.
 
 ## Verify
 

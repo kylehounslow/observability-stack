@@ -18,6 +18,9 @@ ALERTMANAGER_PORT = os.getenv("ALERTMANAGER_PORT", "9093")
 _opensearch_protocol = os.getenv("OPENSEARCH_PROTOCOL", "https")
 OPENSEARCH_ENDPOINT = os.getenv("OPENSEARCH_ENDPOINT", f"{_opensearch_protocol}://{os.getenv('OPENSEARCH_HOST', 'opensearch')}:{os.getenv('OPENSEARCH_PORT', '9200')}")
 ISM_RETENTION_DAYS = int(os.getenv("ISM_RETENTION_DAYS", "7"))
+INSTALL_EBPF_EXAMPLE_DASHBOARD = os.getenv(
+    "INSTALL_EBPF_EXAMPLE_DASHBOARD", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _ism_policy(policy_id, description, index_patterns, rollover_size, retention_days):
@@ -1893,6 +1896,9 @@ def main():
     # SDK-language variables; reuses the logs/span/service-map index patterns and
     # the ObservabilityStack_Prometheus datasource created above.
     import_ndjson_dashboard(workspace_id, "/config/dashboard-astronomy-service-telemetry.ndjson", ndjson_id_mappings)
+    # eBPF example: OBI HTTP metrics for the example services. Only when the eBPF example is enabled.
+    if INSTALL_EBPF_EXAMPLE_DASHBOARD:
+        import_ndjson_dashboard(workspace_id, "/config/dashboard-ebpf-example.ndjson", ndjson_id_mappings)
 
     # Create APM config correlation (ties traces + service map + Prometheus)
     if traces_pattern_id and service_map_pattern_id:

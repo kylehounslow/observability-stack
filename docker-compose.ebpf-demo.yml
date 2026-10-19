@@ -7,6 +7,7 @@
 #   INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml
 #   INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml
 #   QUOTE_ADDR=http://rate-gateway:18101
+#   INSTALL_EBPF_EXAMPLE_DASHBOARD=true
 # then run: docker compose up -d
 #
 # Linux hosts only. OBI runs privileged with the host PID namespace and host network.
