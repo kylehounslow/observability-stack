@@ -4,7 +4,7 @@ import sys
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-CALLS = [u for u in os.environ.get("CALLS", "").split(",") if u]
+CALLS = [u.strip() for u in os.environ.get("CALLS", "").split(",") if u.strip()]
 
 
 class Handler(BaseHTTPRequestHandler):

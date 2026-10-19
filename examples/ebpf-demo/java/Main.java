@@ -11,8 +11,8 @@ import java.util.concurrent.Executors;
 public class Main {
     public static void main(String[] args) throws Exception {
         HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build();
-        String callsEnv = System.getenv().getOrDefault("CALLS", "");
-        String[] calls = callsEnv.isEmpty() ? new String[0] : callsEnv.split(",");
+        String[] calls = java.util.Arrays.stream(System.getenv().getOrDefault("CALLS", "").split(","))
+                .map(String::trim).filter(c -> !c.isEmpty()).toArray(String[]::new);
         HttpServer server = HttpServer.create(new InetSocketAddress(Integer.parseInt(System.getenv("PORT"))), 0);
         server.setExecutor(Executors.newFixedThreadPool(8));
         server.createContext("/", ex -> {

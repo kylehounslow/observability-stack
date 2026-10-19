@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jdk AS build
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk AS build
 WORKDIR /src
 COPY Main.java .
 RUN javac Main.java
