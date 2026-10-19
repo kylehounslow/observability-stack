@@ -87,11 +87,21 @@ The chart runs OBI privileged with `hostPID` and `hostNetwork`. With `contextPro
 
 Select namespaces whose services have no OTel SDK, and leave out the namespace the observability stack runs in. Otherwise OBI traces OpenSearch, Cortex, and the exporters, and every span OBI writes produces more spans. See [Services instrumented with an OTel SDK](#known-limitations) for why mixing OBI and SDK services in one selector produces duplicates.
 
-If you deploy OBI with your own manifests instead of the chart, mount `/sys/kernel/tracing` from the host. See [Kernel and node requirements](#kernel-and-node-requirements).
+If you deploy OBI with your own manifests instead of the chart, mount `/sys/kernel/tracing` from the host. See [Linux kernel and node requirements](#linux-kernel-and-node-requirements).
+
+## Add OBI to a running cluster
+
+OBI attaches to processes that are already running, so adding it doesn't require redeploying or restarting the services it instruments. Install the chart as shown above into a cluster where the services are already serving traffic:
+
+- OBI attaches to the matching processes within about 10 to 20 seconds of the OBI pod starting. Calls made after that carry `traceparent`, and linked traces show up on the [Application Map](/docs/apm/service-map/) once Data Prepper flushes them.
+- Go services, and services that open a new connection per request, link from the first call after OBI attaches.
+- On kernels before 6.4, non-Go services that reuse a pooled connection opened before OBI attached keep sending calls without `traceparent`. See [Restart non-Go workloads on Linux kernels before 6.4](#restart-non-go-workloads-on-linux-kernels-before-64).
+
+To remove OBI, run `helm uninstall obi -n obi`. OBI's eBPF programs detach with the DaemonSet; the instrumented services keep running unchanged, and traces return to what they were before OBI.
 
 ## Docker Compose
 
-Add OBI as a service next to the stack. Context propagation for non-Go services rewrites packets on the host network interfaces, so OBI runs with `network_mode: host` and sends OTLP to the collector port published on the host:
+Add OBI as a service next to the stack. OBI needs host network access for context propagation, so it runs with `network_mode: host` and sends OTLP to the collector port published on the host:
 
 ```yaml
 services:
@@ -126,19 +136,34 @@ source = otel-v1-apm-span-*
 
 Each instrumented service should have both `SPAN_KIND_SERVER` spans and, if it calls other services, `SPAN_KIND_CLIENT` spans.
 
-## Kernel and node requirements
+## Linux kernel and node requirements
 
-### Mount `/sys/kernel/tracing` on recent kernels
+### Mount `/sys/kernel/tracing` on recent Linux kernels
 
 Kernels 6.6.128+, 6.12.75+, 6.18.14+, and 6.19+ include a socket change that OBI works around with an extra eBPF probe. That probe needs tracefs. If `/sys/kernel/tracing` isn't mounted into the OBI container, OBI logs `context propagation is disabled` at startup and stops injecting `traceparent` for non-Go services. Go services still propagate, so the map looks partly right. The Amazon Linux 2023 EKS AMI for Kubernetes 1.34 ships kernel 6.12 and is affected; the 1.32 AMI ships kernel 6.1 and isn't. Check with `kubectl get nodes -o wide`. See [OBI #3076](https://github.com/open-telemetry/opentelemetry-ebpf-instrumentation/pull/3076).
 
 The Helm chart mounts tracefs when `contextPropagation.enabled` is true. For Compose or your own manifests, add the mount shown above. With the mount in place, OBI logs `FIONREAD compensation verified`.
 
-### Restart workloads after installing OBI on kernels before 6.4
+### Restart non-Go workloads on Linux kernels before 6.4
 
-On kernels before 6.4, OBI can't pick up TCP connections that were open before it started, and logs `TCP socket iterator disabled` at startup. Non-Go services that reuse a pooled keep-alive connection, such as Java's `HttpClient`, send no `traceparent` on that connection until it reconnects. The same applies after OBI restarts or upgrades. Go services and services that open a new connection per request aren't affected.
+On kernels before 6.4, OBI can't pick up TCP connections that were opened before it attached to a process, and logs `TCP socket iterator disabled` at startup. A non-Go service that reuses a pooled keep-alive connection, such as Java's `HttpClient`, sends no `traceparent` on that connection for as long as the connection stays open. Go services and services that open a new connection per request aren't affected.
 
-Run `kubectl rollout restart` on the instrumented workloads after OBI is running. On kernel 6.12, OBI picked up existing connections both at install and after a DaemonSet restart.
+This happens in three cases:
+
+- OBI is installed while the service is already running.
+- OBI restarts or is upgraded.
+- A new pod starts receiving traffic before OBI attaches to it, which takes about 10 seconds. This applies to every rollout and scale-out, not only the first install. Under steady traffic, a plain `kubectl rollout restart` doesn't fix it, because the new pod opens its pooled connection before OBI attaches.
+
+To avoid it, delay readiness on non-Go services that make outgoing calls until OBI has attached, for example with a readiness probe that waits 20 seconds:
+
+```yaml
+readinessProbe:
+  tcpSocket:
+    port: 8080
+  initialDelaySeconds: 20
+```
+
+Then roll the workload so its pods restart behind the delay. Nodes on kernel 6.4 or later don't need this: on kernel 6.12, OBI picked up existing connections both at install and after a DaemonSet restart.
 
 ### Test across nodes
 
