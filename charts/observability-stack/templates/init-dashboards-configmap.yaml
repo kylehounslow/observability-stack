@@ -28,6 +28,8 @@ data:
 {{ .Files.Get "files/dashboard-astronomy-shop.ndjson" | indent 4 }}
   dashboard-astronomy-service-telemetry.ndjson: |
 {{ .Files.Get "files/dashboard-astronomy-service-telemetry.ndjson" | indent 4 }}
+  dashboard-ebpf-example.ndjson: |
+{{ .Files.Get "files/dashboard-ebpf-example.ndjson" | indent 4 }}
 binaryData:
   architecture.png: {{ .Files.Get "files/architecture.png" | b64enc }}
 {{- end }}

@@ -5,7 +5,10 @@ name: observability-stack
 
 include:
   - path: ${INCLUDE_COMPOSE_EXAMPLES:-docker-compose/util/docker-compose.empty.yml}
-  - path: ${INCLUDE_COMPOSE_OTEL_DEMO:-docker-compose/util/docker-compose.empty.yml}
+  # The eBPF example merges into the OpenTelemetry Demo so it can repoint shipping at rate-gateway.
+  - path:
+      - ${INCLUDE_COMPOSE_OTEL_DEMO:-docker-compose/util/docker-compose.empty.yml}
+      - ${INCLUDE_COMPOSE_EBPF_DEMO:-docker-compose/util/docker-compose.empty.yml}
   - path: ${INCLUDE_COMPOSE_AGENT_EVAL_LLM:-docker-compose/util/docker-compose.empty.yml}
   - path: ${INCLUDE_COMPOSE_LOCAL_OPENSEARCH:-docker-compose/util/docker-compose.empty.yml}
   - path: ${INCLUDE_COMPOSE_LOCAL_OPENSEARCH_DASHBOARDS:-docker-compose/util/docker-compose.empty.yml}
@@ -293,6 +296,8 @@ services:
       # Safe fallback is disabled when this stack is run without the checked-in
       # .env quickstart configuration.
       - INSTALL_VISUALIZATION_SAMPLES=${INSTALL_VISUALIZATION_SAMPLES:-false}
+      # Set with INCLUDE_COMPOSE_EBPF_DEMO to import the eBPF example dashboard.
+      - INSTALL_EBPF_EXAMPLE_DASHBOARD=${INSTALL_EBPF_EXAMPLE_DASHBOARD:-false}
       - PROMETHEUS_HOST=${PROMETHEUS_HOST}
       - PROMETHEUS_PORT=${PROMETHEUS_PORT}
       # alertmanager.uri is set on the Prometheus datasource unconditionally.
@@ -310,6 +315,7 @@ services:
       - ./docker-compose/opensearch-dashboards/init/architecture.png:/config/architecture.png
       - ./docker-compose/opensearch-dashboards/init/dashboard-astronomy-shop.ndjson:/config/dashboard-astronomy-shop.ndjson
       - ./docker-compose/opensearch-dashboards/init/dashboard-astronomy-service-telemetry.ndjson:/config/dashboard-astronomy-service-telemetry.ndjson
+      - ./docker-compose/opensearch-dashboards/init/dashboard-ebpf-example.ndjson:/config/dashboard-ebpf-example.ndjson
       - ./docker-compose/opensearch-dashboards/init/demo-dashboards:/config/demo-dashboards:ro
     networks:
       - observability-stack-network

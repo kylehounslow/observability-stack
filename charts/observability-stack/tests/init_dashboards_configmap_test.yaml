@@ -22,3 +22,8 @@ tests:
       - equal:
           path: metadata.annotations["helm.sh/hook"]
           value: post-install,post-upgrade
+
+  - it: should include the eBPF example dashboard
+    asserts:
+      - exists:
+          path: data["dashboard-ebpf-example.ndjson"]
