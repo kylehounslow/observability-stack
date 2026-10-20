@@ -141,8 +141,10 @@ flowchart LR
 Kubernetes: install with the bundled values file, which enables OBI, the demo services, and the OpenTelemetry Demo, and points `shipping` at `rate-gateway`:
 
 ```bash
-helm install obs charts/observability-stack -f charts/observability-stack/values-ebpf-demo.yaml
+helm install obs-stack charts/observability-stack -f charts/observability-stack/values-ebpf-demo.yaml
 ```
+
+Use the release name `obs-stack`: the chart's OpenTelemetry Demo values send its telemetry to `obs-stack-opentelemetry-collector`.
 
 With the [EKS Terraform module](/docs/deploy/kubernetes/#eks-deployment), set `enable_otel_demo = true` and `enable_ebpf_demo = true`.
 
@@ -153,7 +155,6 @@ Docker Compose (Linux hosts only): set these in `.env`, then run `docker compose
 ```bash
 INCLUDE_COMPOSE_OTEL_DEMO=docker-compose.otel-demo.yml
 INCLUDE_COMPOSE_EBPF_DEMO=docker-compose.ebpf-demo.yml
-QUOTE_ADDR=http://rate-gateway:18101
 INSTALL_EBPF_EXAMPLE_DASHBOARD=true
 ```
 

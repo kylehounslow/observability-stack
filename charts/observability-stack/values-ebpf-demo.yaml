@@ -1,5 +1,7 @@
 # eBPF example: OBI plus services with no OTel SDK in the OpenTelemetry Demo's shipping path.
-#   helm install obs . -f values-ebpf-demo.yaml
+#   helm install obs-stack . -f values-ebpf-demo.yaml
+# The OpenTelemetry Demo sends to obs-stack-opentelemetry-collector (opentelemetry-demo.default.envOverrides
+# in values.yaml), so use release name obs-stack or override OTEL_COLLECTOR_NAME there.
 # OBI runs privileged with hostPID and hostNetwork on every node.
 obi:
   enabled: true

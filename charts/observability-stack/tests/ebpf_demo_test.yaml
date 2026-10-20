@@ -52,4 +52,4 @@ tests:
           value: ebpf-demo
       - equal:
           path: spec.template.spec.containers[0].image
-          value: ghcr.io/kylehounslow/observability-stack/ebpf-demo-java:latest
+          value: ghcr.io/kylehounslow/observability-stack/ebpf-demo-java@sha256:e7bd3b3a01fa5e5c13842cc1aeb8c24d2b59aaa8185d53942701113c1e06d612
