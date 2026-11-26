@@ -9,7 +9,7 @@ name: CDK End-to-End
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
     paths:
       - 'aws/cdk/**'
       - '.github/workflows/cdk-e2e.yml'
